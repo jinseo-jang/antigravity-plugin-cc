@@ -4,14 +4,22 @@
 
 set -euo pipefail
 
-# Resolve the backend base the SAME way the companion (slash commands) and src/cao/* resolve state:
-# CAO_PLUGIN_DATA else ~/.config/cao. NOT CLAUDE_PLUGIN_DATA — Claude Code exports that to hooks only,
-# never to slash commands, so installing there left the backend unfindable at command time (the
-# "cannot import cao.runtime" / "daemon did not become ready" bug).
-# ponytail: files under ~/.config/cao are not auto-removed on plugin uninstall and are shared across
-# installs; fine for a single plugin — set CAO_PLUGIN_DATA to relocate/isolate.
-PLUGIN_DATA="${CAO_PLUGIN_DATA:-${HOME}/.config/cao}"
+# Resolve ONE base for the hook, the companion (slash commands), and src/cao/*:
+#   CAO_PLUGIN_DATA (explicit override) -> CLAUDE_PLUGIN_DATA (the standard per-plugin data dir, which
+#   Claude Code exports to HOOKS) -> ~/.config/cao (standalone fallback outside Claude Code).
+# Installing under CLAUDE_PLUGIN_DATA keeps backend+state+config in the dir Claude Code auto-removes on
+# uninstall (clean lifecycle) and that survives reboots (not /tmp).
+PLUGIN_DATA="${CAO_PLUGIN_DATA:-${CLAUDE_PLUGIN_DATA:-${HOME}/.config/cao}}"
 mkdir -p "${PLUGIN_DATA}"
+
+# Bridge the resolved base to slash commands, which do NOT get CLAUDE_PLUGIN_DATA in their env: write
+# the namespaced CAO_PLUGIN_DATA into $CLAUDE_ENV_FILE (Claude Code sources it before later commands).
+# #338-safe: export ONLY CAO_PLUGIN_DATA — never the reserved CLAUDE_PLUGIN_DATA (that would clobber
+# other plugins' per-plugin scoping) and never a global PYTHONPATH (that would leak our deps into other
+# plugins); the companion puts site-packages on the daemon subprocess's PYTHONPATH, scoped to it only.
+if [[ -n "${CLAUDE_ENV_FILE:-}" ]]; then
+  printf 'export CAO_PLUGIN_DATA=%q\n' "${PLUGIN_DATA}" >> "${CLAUDE_ENV_FILE}"
+fi
 
 SITE_PACKAGES="${PLUGIN_DATA}/site-packages"
 MARKER="${PLUGIN_DATA}/.cao_installed"
