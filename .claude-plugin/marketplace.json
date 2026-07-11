@@ -1,7 +1,7 @@
 {
   "name": "agy",
   "owner": {
-    "name": "code-yeongyu"
+    "name": "jinseo-jang"
   },
   "description": "Antigravity Plugin for Claude Code — Claude supervises a Google Antigravity SDK (Gemini) worker with policy-gated tools, human shell approval, and per-session git-diff digests.",
   "plugins": [
@@ -11,7 +11,7 @@
       "displayName": "Antigravity Plugin for Claude Code",
       "description": "Supervises a Google Antigravity SDK worker from Claude Code. Claude acts as supervisor; Gemini does the work.",
       "version": "0.1.0",
-      "repository": "https://github.com/code-yeongyu/antigravity-plugin-cc",
+      "repository": "https://github.com/jinseo-jang/antigravity-plugin-cc",
       "tags": ["ai", "gemini", "antigravity", "orchestration"]
     }
   ]
