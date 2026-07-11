@@ -7,7 +7,7 @@ A Claude Code plugin that turns Claude into a supervisor for a [Google Antigravi
 ## Quickstart
 
 ```
-/plugin marketplace add code-yeongyu/antigravity-plugin-cc
+/plugin marketplace add jinseo-jang/antigravity-plugin-cc
 /plugin install agy@agy
 ```
 
@@ -21,7 +21,7 @@ Install from the Claude Code plugin marketplace (two steps):
 
 ```
 # 1. register this repo as a plugin marketplace
-/plugin marketplace add code-yeongyu/antigravity-plugin-cc
+/plugin marketplace add jinseo-jang/antigravity-plugin-cc
 # 2. install the "agy" plugin from it (plugin-name@marketplace-name)
 /plugin install agy@agy
 ```
@@ -87,7 +87,7 @@ A resolved Gemini key takes precedence over Vertex/ADC. If no key resolves and n
 
 Any other model string is rejected immediately with JSON-RPC `-32602` and a recovery message. Override with `CAO_MODEL=gemini-3.5-flash` or `--model` per session. Both models support `--effort` (thinking levels).
 
-**Region is your choice.** agy doesn't hardcode a location gate. Pick a Vertex region via `/agy:setup` or `GOOGLE_CLOUD_LOCATION`. These Gemini-3 models are currently served on `global`; a not-yet-available region hangs until the worker-turn timeout, so only choose another region once your model is actually served there.
+**Region is your choice.** agy doesn't hardcode a location allowlist. Pick a Vertex region via `/agy:setup` or `GOOGLE_CLOUD_LOCATION`; these Gemini-3 models are currently served on `global` (the default). Before each Vertex turn agy runs a fast pre-flight probe — a region that definitively doesn't serve your model fails immediately with a clear `-32602` error rather than hanging. (Ambiguous or transient probe failures fall through and can still hang until the worker-turn timeout, so prefer `global` unless you know your region serves the model.)
 
 ### Persisting defaults
 
@@ -100,6 +100,7 @@ Run `/agy:setup` inside Claude Code. It asks for mode, model, and location, vali
 | Command | Description |
 |---|---|
 | `/agy:implement <task> [--model <id>] [--effort <level>] [--file <path>]... [--background] [--resume [id]] [--fresh]` | Start (or continue) a session. `--background` returns immediately; `--resume` continues a prior run; `--fresh` forces a new conversation. |
+| `/agy:handoff <what the worker should do next> [--background]` | Hand the **current Claude conversation** to a new worker — the daemon summarizes it into the worker's context so it continues without a cold start (text-only). `--background` detaches. |
 | `/agy:setup` | Persist model/region defaults to `defaults.json` via an interactive interview. |
 | `/agy:approve <call_id> [project\|global]` | Approve a pending shell command. `project`/`global` remembers it for future runs. |
 | `/agy:deny <call_id> [reason]` | Deny a pending shell command. |
@@ -109,6 +110,12 @@ Run `/agy:setup` inside Claude Code. It asks for mode, model, and location, vali
 | `/agy:retry [strategy]` | Retry the latest session. `strategy` is `clean` (default) or `resume`. |
 | `/agy:review <target>` | Start a review session (worker reports findings without modifying files). |
 | `/agy:watch <session_id>` | Watch a session; block until an approval is pending or it finishes. |
+
+### Handoff vs. resume
+
+`/agy:handoff <task>` hands your **current Claude Code conversation** to a fresh Antigravity worker. The daemon reads the conversation transcript, summarizes it (a bounded **text-only** excerpt — roughly the last 40 turns, truncated to ~12k characters), and injects it into the worker's system instructions so it continues with your context instead of starting cold. Only the conversation *text* carries over — **not** the tool-call history (files read, commands run). The session is writable and can request shell approvals; `--background` detaches it (retrieve later with `/agy:status`, `/agy:events`, `/agy:watch`).
+
+This is different from `/agy:implement --resume`, which continues a **prior Antigravity worker session** (its own Gemini conversation) — not your Claude conversation.
 
 ---
 
@@ -169,6 +176,45 @@ CAO_LIVE_TEST=1 pytest tests/e2e/test_live_smoke.py -v
 ```
 
 The live smoke test fires a real Gemini turn through the real SDK and verifies the hook chain end-to-end.
+
+---
+
+## FAQ & warnings
+
+**⚠️ Where does my session data live — and does it survive a reboot?**
+By default the daemon writes session state under `/tmp/cao-companion/`, which most systems **wipe on reboot**. Your event log, digests, and the conversation trajectory (the SQLite `.db` that `--resume` replays) are **lost after a restart**. To keep them, point `CAO_PLUGIN_DATA` at a persistent directory:
+
+```bash
+# add to ~/.bashrc or ~/.zshrc
+export CAO_PLUGIN_DATA="$HOME/.local/share/cao"
+```
+
+State then lives under `$CAO_PLUGIN_DATA/state/<workspace>-<hash>/` (`events.jsonl`, `digest.md`, `trajectories/<id>/<conversation_id>.db`, a private `shadow.git`, ...). `approvals.json` and `defaults.json` are always persistent (`~/.config/cao`, or `$CAO_PLUGIN_DATA` if set).
+
+**What is the "digest"?** After each session the daemon writes a compact Markdown summary (`digest.md` / `digest-<session_id>.md`) — events, approvals, and a `Changed Files` git-diff. It's how you review a run without watching it live (`/agy:events`).
+
+**Does `/agy:handoff` carry my whole Claude session?** No — it's **text-only**. A bounded summary of the conversation is passed to the worker; tool-call history (files read, commands run) does not carry over.
+
+**A shell-approval prompt timed out.** Pending approvals **auto-deny after 5 minutes**. For long unattended runs, pre-approve expected commands with "Approve for this project" / "Approve always".
+
+**My session hangs forever.** On Vertex, agy pre-probes your model×region and usually fails fast with a clear `-32602` when the region definitely can't serve the model. A hang instead means the probe was inconclusive (a transient or non-404 error) or you're in Gemini-API-key mode (which has no region check) — double-check your model×region and prefer the default `global` location.
+
+---
+
+## Releases
+
+Versioned with [SemVer](https://semver.org). Cutting a release:
+
+1. **Bump every version pin at once.** The version is pinned in five files (`pyproject.toml`, `plugin/.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, the `session_start.sh` install pin, and `CHANGELOG.md`); a drifted pin makes the install hook fetch a nonexistent backend version, so use the helper:
+   ```bash
+   scripts/bump-version.sh 0.2.0        # (scripts/bump-version.sh --self-check verifies the logic)
+   ```
+2. **Fill in the new `CHANGELOG.md` entry, commit, and tag:**
+   ```bash
+   git commit -am "chore: release v0.2.0" && git tag v0.2.0
+   git push origin main --tags
+   ```
+3. **Publish a GitHub Release** for the tag. [`.github/workflows/publish.yml`](.github/workflows/publish.yml) then builds and uploads `claude-antigravity-orchestrator` to PyPI via Trusted Publishing (OIDC); [`.github/release.yml`](.github/release.yml) groups the notes by PR label (`breaking` / `enhancement` / `bug` / `documentation`).
 
 ---
 
