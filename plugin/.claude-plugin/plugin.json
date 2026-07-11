@@ -1,0 +1,9 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "agy",
+  "version": "0.1.0",
+  "description": "Antigravity Orchestrator \u2014 supervisor plugin for the Antigravity SDK worker runtime",
+  "author": {
+    "name": "code-yeongyu"
+  }
+}

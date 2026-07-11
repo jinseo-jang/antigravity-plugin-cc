@@ -1,0 +1,24 @@
+# 내부 전용 — 절대 공개 커밋 금지
+.opencode/
+.omo/
+.codegraph/
+opencode.json
+AGENTS.md
+marker.txt
+qa/
+tests/manual/
+design/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.env
+.venv/
+venv/
+dist/
+build/
+*.egg-info/

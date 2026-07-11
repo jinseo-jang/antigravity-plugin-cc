@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/session_start.sh\" || true"
+          },
+          {
+            "type": "command",
+            "command": "python3 -c \"import json,os,sys; d=json.load(sys.stdin); f=os.environ.get('CLAUDE_ENV_FILE'); open(f,'a').write('export CLAUDE_SESSION_ID=%s\\nexport CLAUDE_TRANSCRIPT_PATH=%s\\n'%(d.get('session_id',''),d.get('transcript_path',''))) if f else None\" 2>/dev/null; true"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CAO_NO_AUTOSTART=1 python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/cao-companion.py\" session.shutdown \"\" 2>/dev/null; true"
+          }
+        ]
+      }
+    ]
+  }
+}
