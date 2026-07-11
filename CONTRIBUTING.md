@@ -2,6 +2,15 @@
 
 Thanks for wanting to improve **agy**. It's a spare-time, single-maintainer project, so a little discipline keeps it maintainable.
 
+## Workflow at a glance
+
+1. **Open an issue** to discuss anything beyond a small fix (see *Before you code*).
+2. **Fork** the repo and branch off `main` (`git checkout -b fix/short-description`).
+3. **Set up** your dev env (see *Dev setup*) and make a single-purpose change with a test.
+4. **Run the gates** (see *Pull requests*) — they must be green.
+5. **Open a PR** against `main` and fill in the PR template.
+6. A single maintainer reviews in spare time; address feedback, then it's squash-merged. Releases are the maintainer's job (see [RELEASING.md](RELEASING.md)).
+
 ## Before you code
 
 - **Discuss features first.** For anything beyond a small fix, open an issue before writing code. Unsolicited feature PRs may be closed.
@@ -29,17 +38,15 @@ pip install -e ".[dev,sdk]"
 
 ## Releasing (maintainers)
 
-The plugin installs its backend directly from GitHub `main` (see `plugin/hooks/session_start.sh`), so **merging to `main` ships it** — there is no PyPI publish step.
-
-**Bumping the version is what upgrades existing users.** The install hook reinstalls the backend whenever the plugin version (`plugin/.claude-plugin/plugin.json`) changes. So a release is: bump the version, merge, and users get the new backend the next time they update the plugin. To cut one:
+Full runbook: **[RELEASING.md](RELEASING.md)**. In short — the backend installs the git tag matching the plugin version (`v<version>`), so a release is *bump the version + push the matching tag* (no PyPI):
 
 ```bash
-scripts/bump-version.sh 0.2.0     # syncs pyproject / plugin.json / marketplace.json / CHANGELOG (run --self-check to verify)
+scripts/bump-version.sh 0.2.0     # sync version fields (run --self-check to verify)
 # fill in the new CHANGELOG.md entry, then:
 git commit -am "chore: release v0.2.0" && git tag v0.2.0 && git push origin main --tags
 ```
 
-Optionally publish a GitHub Release for the tag; `.github/release.yml` groups the notes by PR label. (For same-version dev iteration, delete `<plugin-data>/.cao_installed` to force a backend reinstall.)
+Existing users get it when they update the plugin (its version bumps → the hook installs the new tag). For same-version dev iteration, set `CAO_BACKEND_REF=main` or delete `<plugin-data>/.cao_installed`.
 
 ## What to expect
 

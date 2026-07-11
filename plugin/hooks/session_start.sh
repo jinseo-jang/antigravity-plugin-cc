@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# SessionStart hook: install the cao backend into the plugin data dir. Reinstalls when the
-# plugin version changes (the marker stores the installed version); skips when they match.
+# SessionStart hook: install the cao backend into the plugin data dir. Installs the git tag
+# matching the plugin version (v<version>) by default; reinstalls when that ref changes.
 
 set -euo pipefail
 
@@ -13,18 +13,21 @@ fi
 SITE_PACKAGES="${PLUGIN_DATA}/site-packages"
 MARKER="${PLUGIN_DATA}/.cao_installed"
 LOG="${PLUGIN_DATA}/.cao_install.log"
-# Installed straight from GitHub (no PyPI release of the orchestrator needed); the [sdk]
-# extra still pulls the google-antigravity SDK from PyPI. Tracks main for fast iteration.
-PACKAGE="git+https://github.com/jinseo-jang/antigravity-plugin-cc@main#egg=claude-antigravity-orchestrator[sdk]"
-
-# Reinstall when the plugin version changes, so updating the plugin (marketplace) upgrades
-# the backend too. The marker stores the installed plugin version; a mismatch - or a manual
-# `rm` of the marker - triggers a clean reinstall.
+# Backend is installed from this GitHub repo (no PyPI release of the orchestrator needed);
+# the [sdk] extra still pulls the google-antigravity SDK from PyPI. By default it pins to the
+# git tag matching the plugin version (v<version>), so each plugin version installs its own
+# reproducible backend. Set CAO_BACKEND_REF (e.g. "main") to override for bleeding-edge/dev.
 PLUGIN_JSON="${CLAUDE_PLUGIN_ROOT:-}/.claude-plugin/plugin.json"
 CURRENT_VER="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "${PLUGIN_JSON}" 2>/dev/null || echo unknown)"
-INSTALLED_VER="$(cat "${MARKER}" 2>/dev/null || echo none)"
+BACKEND_REF="${CAO_BACKEND_REF:-v${CURRENT_VER}}"
+PACKAGE="git+https://github.com/jinseo-jang/antigravity-plugin-cc@${BACKEND_REF}#egg=claude-antigravity-orchestrator[sdk]"
 
-if [[ "${CURRENT_VER}" != "${INSTALLED_VER}" ]]; then
+# Reinstall when the target ref changes (a plugin-version bump, or a CAO_BACKEND_REF change),
+# so updating the plugin upgrades the backend. The marker stores the installed ref; deleting
+# it forces a reinstall.
+INSTALLED_REF="$(cat "${MARKER}" 2>/dev/null || echo none)"
+
+if [[ "${BACKEND_REF}" != "${INSTALLED_REF}" ]]; then
   # --target keeps the install private and works on PEP 668 externally-managed systems.
   # Requires git + network (GitHub for the backend, PyPI for the google-antigravity SDK).
   # Install into a fresh ".new" dir and swap on success, so a failed upgrade never wipes a
@@ -34,7 +37,7 @@ if [[ "${CURRENT_VER}" != "${INSTALLED_VER}" ]]; then
   if pip install --quiet --target "${SITE_PACKAGES}.new" "${PACKAGE}" > "${LOG}" 2>&1; then
     rm -rf "${SITE_PACKAGES}"
     mv "${SITE_PACKAGES}.new" "${SITE_PACKAGES}"
-    echo "${CURRENT_VER}" > "${MARKER}"
+    echo "${BACKEND_REF}" > "${MARKER}"
   else
     rm -rf "${SITE_PACKAGES}.new"
     echo "Antigravity: SDK install failed; see ${LOG}" >&2

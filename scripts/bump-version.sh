@@ -8,7 +8,8 @@
 #   plugin/.claude-plugin/plugin.json  "version": "X.Y.Z"
 #   .claude-plugin/marketplace.json    "version": "X.Y.Z"  (plugin entry)
 #   CHANGELOG.md                       new "## [X.Y.Z] - <date>" section
-# (session_start.sh installs from git @main, so it carries no version pin to bump.)
+# session_start.sh installs the git tag v<version> matching plugin.json, so a release MUST
+# also create + push that tag (see RELEASING.md); this script only syncs the version fields.
 #
 # Usage:
 #   scripts/bump-version.sh X.Y.Z      # bump all version fields to X.Y.Z
