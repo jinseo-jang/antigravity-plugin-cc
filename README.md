@@ -1,163 +1,124 @@
-# Antigravity Orchestrator
+# Antigravity Plugin for Claude Code
 
-Antigravity is a Claude Code plugin that supervises a real [Google Antigravity SDK](https://pypi.org/project/google-antigravity/) worker. Claude acts as the supervisor; the Antigravity SDK runs the Gemini model that does the actual work. Antigravity gates every tool call through SDK-native policy, routes shell commands through human approval, and records a git-diff digest after each session.
+A Claude Code plugin that turns Claude into a supervisor for a [Google Antigravity SDK](https://pypi.org/project/google-antigravity/) worker. Claude plans and reviews; the Antigravity SDK runs Gemini to do the actual work. Every worker tool call is gated by SDK-native policy, shell commands require human approval, and each session ends with a git-diff digest.
 
 ---
 
-## Architecture
+## Quickstart
 
 ```
-Claude Code (supervisor)
-  │  plugin commands (/agy:implement, /agy:approve, /agy:deny, ...)
-  │  JSON-RPC 2.0 over Unix Domain Socket
-  ▼
-Antigravity Companion Daemon  (src/cao/runtime/daemon.py)
-  │  SessionManager → CAOPreToolCallDecideHook(wraps sdk_policy.enforce(policies))
-  │                 → LocalAgentConfig(hooks=[hook,...], policies=[], workspaces, **auth)
-  │                 → Agent.chat(task)
-  ▼
-Antigravity SDK worker  (google-antigravity wheel, bundles Go localharness)
-  │  every tool call passes through:
-  │    CAOPreToolCallDecideHook → sdk_policy.enforce(policies)
-  │      ├─ deny("*", when=credential_path)   [Global Deny]
-  │      ├─ workspace_only([ws])               [Specific Deny per file tool]
-  │      └─ confirm_run_command(ask_handler)   [Ask → ApprovalWaiter → IPC]
-  │    CAOOnSessionStartHook  → git before-snapshot + session.started event
-  │    CAOOnSessionEndHook    → git after-snapshot + Markdown digest
-  ▼
-EventBus → events.jsonl (append-only, workspace-isolated state dir)
-GitDiffCollector → real git via asyncio subprocess
-DigestGenerator → compact Markdown digest from events.jsonl
+/plugin marketplace add code-yeongyu/antigravity-plugin-cc
+/plugin install agy@agy
 ```
+
+Then pick an auth mode below, open a project, and run `/agy:implement <task>`.
 
 ---
 
 ## Install
 
-### 1. Install the Antigravity SDK
+Install from the Claude Code plugin marketplace (two steps):
 
-The official wheel bundles the Go localharness binary:
-
-```bash
-pip install google-antigravity
-# or, inside a venv:
-pip install --break-system-packages google-antigravity
 ```
-
-### 2. Install the Claude Code Plugin
-
-Install the plugin directly from the Claude Code marketplace:
-
-```bash
+# 1. register this repo as a plugin marketplace
 /plugin marketplace add code-yeongyu/antigravity-plugin-cc
-/plugin install agy@code-yeongyu/antigravity-plugin-cc
+# 2. install the "agy" plugin from it (plugin-name@marketplace-name)
+/plugin install agy@agy
 ```
 
-The plugin will automatically install the `claude-antigravity-orchestrator` Python package into its cache directory when you start a session.
+**No manual `pip install` needed.** On the first session after install, a bundled `SessionStart` hook fetches the Python backend `claude-antigravity-orchestrator[sdk]` (which includes `google-antigravity`) from PyPI into the plugin's private data directory and adds that directory to its Python path — you never run `pip` yourself. Installing into a private `--target` directory works even on externally-managed (PEP 668) systems, and it runs once (later sessions reuse it).
 
-## Auth setup
+**Prerequisites you do need:**
 
-Antigravity supports two auth modes. Set one before starting the daemon.
+- Python 3.11+ and `pip` on PATH (the hook shells out to `pip`)
+- Network access on first run (the backend is fetched from PyPI once, then cached)
+- `git` on PATH (used for the per-session change digest; optional — without it the digest shows a Risk Note instead of `Changed Files`)
+
+**From source (contributors):**
+
+```bash
+pip install -e ".[sdk]"
+```
+
+---
+
+## Auth
+
+Two modes. Pick one.
 
 ### Mode A: Vertex AI via gcloud ADC (recommended for GCP users)
 
 ```bash
 gcloud auth application-default login
-export GOOGLE_CLOUD_PROJECT=your-project-id
-export GOOGLE_CLOUD_LOCATION=global   # default; set any region where your model is served
 ```
 
-Antigravity detects `GOOGLE_CLOUD_PROJECT` and uses ADC automatically. No API key needed.
+That's it. agy auto-detects your GCP project from your Application Default Credentials (or active gcloud config) — no environment variables required. If no project is detected yet:
+
+```bash
+gcloud config set project YOUR_PROJECT_ID
+```
+
+`GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION` are optional overrides (e.g. to pin a non-default project or a specific Vertex region). Location defaults to `global`.
 
 ### Mode B: Gemini API key
 
-```bash
-export GEMINI_API_KEY=your-api-key-here
-```
+The key resolves from three places, in order:
 
-Antigravity detects a Gemini API key and uses the Gemini API directly. The key is read from three places, in order: (1) the **OS keychain** — `python -m keyring set cao gemini_api_key` (encrypted at rest, recommended); (2) the **`GEMINI_API_KEY`** environment variable (Google's recommended location); (3) a **plaintext file** `~/.config/cao/gemini_api_key` (chmod 600) — last resort, not encrypted.
+1. **OS keychain** (recommended — encrypted at rest):
+   ```bash
+   python -m keyring set cao gemini_api_key
+   ```
+2. **`GEMINI_API_KEY` environment variable** — put this in a persistent shell startup file, not a one-off export:
+   ```bash
+   # Add to ~/.bashrc or ~/.zshrc, then restart your shell / Claude Code:
+   export GEMINI_API_KEY=your-key-here
+   ```
+   A one-off `export` in a single terminal won't be seen by the plugin's background daemon in later sessions. The keychain option avoids this entirely.
+3. **Plaintext file** `~/.config/cao/gemini_api_key` (chmod 600) — last resort, not encrypted.
 
-**Resolver precedence:** within Gemini-key mode the key resolves keychain → `GEMINI_API_KEY` → key file, and a resolved Gemini key wins over ADC/Vertex. If no key resolves and `GOOGLE_CLOUD_PROJECT` is unset, the daemon raises `AuthNotConfigured` on startup.
+A resolved Gemini key takes precedence over Vertex/ADC. If no key resolves and no gcloud project is active, the daemon raises `AuthNotConfigured` on startup.
 
-**Supported models:** agy accepts exactly two models:
+### Supported models
 
-| Model | Status | Vertex regions |
+| Model | Status | Default location |
 |---|---|---|
-| `gemini-3.5-flash` | GA | `global` (default; currently the region these models are served on) |
-| `gemini-3.1-pro-preview` | Public Preview | `global` (default); narrower regional availability |
+| `gemini-3.5-flash` | GA (default) | `global` |
+| `gemini-3.1-pro-preview` | Public Preview | `global`; narrower regional availability |
 
-Any other model string (including `gemini-2.5-flash`, `gemini-3.1-pro`, etc.) is rejected immediately with JSON-RPC `-32602` and a recovery message. The default model is `gemini-3.5-flash`; the default location is `global`. Override with `CAO_MODEL=gemini-3.5-flash` or `--model` per session.
+Any other model string is rejected immediately with JSON-RPC `-32602` and a recovery message. Override with `CAO_MODEL=gemini-3.5-flash` or `--model` per session. Both models support `--effort` (thinking levels).
 
-**Region is your choice.** agy does not hardcode a location gate — Gemini's regional availability keeps expanding, so you pick the Vertex region via `/agy:setup` or `GOOGLE_CLOUD_LOCATION`. As of now these Gemini-3 models are served on `global` (the default); a not-yet-available region is **not** blocked up front — it hangs until the worker-turn timeout, so only choose another region once your model is actually served there. Both models support `--effort` (thinking levels).
+**Region is your choice.** agy doesn't hardcode a location gate. Pick a Vertex region via `/agy:setup` or `GOOGLE_CLOUD_LOCATION`. These Gemini-3 models are currently served on `global`; a not-yet-available region hangs until the worker-turn timeout, so only choose another region once your model is actually served there.
 
-### Persisting defaults with /agy:setup
+### Persisting defaults
 
-Instead of setting environment variables every session, run `/agy:setup` inside Claude Code. It asks which mode you want (`vertex` or `gemini_api_key`), then which model and location, validates the combination, and writes `~/.config/cao/defaults.json` (or `$CAO_PLUGIN_DATA/defaults.json`). Defaults take effect on the next `/agy:implement` — no daemon restart needed.
-
-```
-/agy:setup
-```
-
-To clear defaults, delete `defaults.json` directly. API keys are never stored there; keep `GEMINI_API_KEY` in your environment.
-
-### Workspace prerequisite (git)
-
-**No git repo or commit required.** The `Changed Files` section of the digest is produced by a private shadow git repository at `<state_dir>/shadow.git`. It snapshots any directory — git repo, non-git dir, fresh `git init`, dirty tree — by staging the working tree and writing tree objects, then diffing them. The workspace's own `.gitignore` is honored; the workspace's own `.git/` is excluded.
-
-The only state that disables objective change tracking is a **missing `git` binary**. In that case `no_git_repo` is set and the digest shows a Risk Note instead of `Changed Files`. The worker still runs.
+Run `/agy:setup` inside Claude Code. It asks for mode, model, and location, validates the combination, and writes `~/.config/cao/defaults.json` (or `$CAO_PLUGIN_DATA/defaults.json`). Defaults take effect on the next `/agy:implement` — no restart needed. API keys are never stored there.
 
 ---
 
 ## Usage
 
-Once loaded, these slash commands are available inside Claude Code:
-
 | Command | Description |
 |---|---|
-| `/agy:implement <task> [--model <id>] [--effort <level>] [--file <path>]... [--background] [--resume [id]] [--fresh]` | Start (or continue) an Antigravity session. `--background` returns immediately; `--resume` continues a prior run; `--fresh` forces a new conversation. |
-| `/agy:setup` | Persist model/region defaults to `defaults.json` via an interactive interview. No daemon restart needed. |
-| `/agy:approve <call_id> [project\|global]` | Approve a pending tool call (shell command). `project`/`global` remembers the command for future runs. |
-| `/agy:deny <call_id> [reason]` | Deny a pending tool call |
+| `/agy:implement <task> [--model <id>] [--effort <level>] [--file <path>]... [--background] [--resume [id]] [--fresh]` | Start (or continue) a session. `--background` returns immediately; `--resume` continues a prior run; `--fresh` forces a new conversation. |
+| `/agy:setup` | Persist model/region defaults to `defaults.json` via an interactive interview. |
+| `/agy:approve <call_id> [project\|global]` | Approve a pending shell command. `project`/`global` remembers it for future runs. |
+| `/agy:deny <call_id> [reason]` | Deny a pending shell command. |
 | `/agy:status [session_id]` | Show session state. Omit `session_id` to target the active (or latest) session. |
-| `/agy:events [session_id] [after_event_id]` | Show recent session events |
-| `/agy:cancel [session_id]` | Cancel the active session |
-| `/agy:retry [strategy]` | Retry the latest session. `strategy` is `clean` (default, fresh conversation) or `resume` (keep conversation). |
-| `/agy:review <target>` | Start a review session (worker reports findings without modifying files) |
-| `/agy:watch <session_id>` | Watch a session; block until an approval is pending or it finishes |
+| `/agy:events [session_id] [after_event_id]` | Show recent session events. |
+| `/agy:cancel [session_id]` | Cancel the active session. |
+| `/agy:retry [strategy]` | Retry the latest session. `strategy` is `clean` (default) or `resume`. |
+| `/agy:review <target>` | Start a review session (worker reports findings without modifying files). |
+| `/agy:watch <session_id>` | Watch a session; block until an approval is pending or it finishes. |
 
-### Approvals
+---
 
-When the Antigravity worker wants to run a shell command, Antigravity suspends the session
-and records an `approval.required` event with a **short, typeable id** (`1`, `2`, ...).
+## Approvals
 
-`/agy:implement`, `/agy:retry`, and `/agy:review` instruct Claude to **watch the session
-for you**: after starting, Claude calls `/agy:watch` (a bounded ~25s long-poll) in a loop.
-The moment an approval is pending, Claude presents it via the native `AskUserQuestion`
-menu (**Approve once / Approve for this project / Approve always / Deny**, arrow-key
-selectable) and relays your choice with `/agy:approve <id> [project|global]` or
-`/agy:deny <id>`.
+When the worker wants to run a shell command, the session suspends and records an `approval.required` event with a short, typeable id (`1`, `2`, ...).
 
-#### Approval memory (allowlist)
+`/agy:implement`, `/agy:retry`, and `/agy:review` watch the session for you: Claude calls `/agy:watch` (a bounded ~25s long-poll) in a loop. When an approval is pending, Claude presents it via the native `AskUserQuestion` menu (**Approve once / Approve for this project / Approve always / Deny**, arrow-key selectable) and relays your choice.
 
-"Approve for this project" and "Approve always" remember the command so identical
-future commands auto-approve without a prompt (the daemon emits an
-`approval.auto_allowed` event instead of suspending).
-
-- **File:** `$CAO_PLUGIN_DATA/approvals.json` if `CAO_PLUGIN_DATA` is set, else
-  `~/.config/cao/approvals.json`. It survives reboots (not under the ephemeral
-  `/tmp` state dir), is written atomically, and a missing/corrupt file is treated
-  as empty. Shape: `{"global": [...], "projects": {"<abs workspace path>": [...]}}`.
-- **Matching is EXACT** — the whole command string must match byte-for-byte. There
-  is no prefix, substring, glob, or regex matching, by design.
-- **Scope:** `project` remembers only for the current workspace; `global` remembers
-  everywhere. `once` (the default) does not persist.
-- **Security note:** the allowlist only short-circuits the `run_command` approval
-  step. It NEVER overrides the secret-file deny or workspace-containment policies —
-  a remembered command still cannot touch `.env`/keys or escape the workspace. To
-  revoke, edit or delete `approvals.json`; the file is re-read fresh on every check.
-
-If you'd rather drive it manually, `/agy:status <session_id>` and `/agy:watch <session_id>`
-print the exact ready-to-paste lines:
+If you'd rather drive it manually, `/agy:status` and `/agy:watch` print ready-to-paste lines:
 
 ```
 Pending approval(s) - paste one line to respond:
@@ -167,6 +128,33 @@ Pending approval(s) - paste one line to respond:
 ```
 
 Timeout (5 min) auto-denies.
+
+### Approval memory (allowlist)
+
+"Approve for this project" and "Approve always" remember the command so identical future commands auto-approve without a prompt.
+
+- **File:** `$CAO_PLUGIN_DATA/approvals.json`, else `~/.config/cao/approvals.json`. Written atomically; a missing/corrupt file is treated as empty.
+- **Matching is EXACT** — the whole command string must match byte-for-byte. No glob or regex, by design.
+- **Scope:** `project` remembers only for the current workspace; `global` remembers everywhere; `once` (default) doesn't persist.
+- **Security:** the allowlist only short-circuits the `run_command` approval step. It never overrides secret-file deny or workspace-containment policies. To revoke, edit or delete `approvals.json`; it's re-read fresh on every check.
+
+---
+
+## Security
+
+Three SDK policies are always active, in priority order:
+
+1. **Secret-file deny** — any tool whose `canonical_path` matches `.env`, `*.pem`, `*.key`, `*.crt`, `*.p12`, `id_rsa`, `id_ed25519`, or `id_dsa` is denied unconditionally. The SDK resolves symlinks and `..` before the predicate runs.
+2. **Workspace containment** — file tools are restricted to the session workspace directory.
+3. **Shell approval** — all `run_command` calls require explicit human approval via `/agy:approve`.
+
+Policy evaluation is fully delegated to the SDK's `policy.enforce()`. Antigravity doesn't hand-roll a policy evaluator.
+
+### Workspace and git
+
+**No git repo or commit required.** The `Changed Files` digest comes from a private shadow git repository at `<state_dir>/shadow.git`. It snapshots any directory — git repo, non-git dir, fresh `git init`, dirty tree — by staging the working tree and writing tree objects, then diffing them. The workspace's own `.gitignore` is honored; its `.git/` is excluded.
+
+The only thing that disables change tracking is a missing `git` binary. In that case the digest shows a Risk Note instead of `Changed Files`. The worker still runs.
 
 ---
 
@@ -184,12 +172,8 @@ The live smoke test fires a real Gemini turn through the real SDK and verifies t
 
 ---
 
-## Security posture
+## Contributing
 
-Three SDK policies are always active, in priority order:
+See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [CHANGELOG.md](CHANGELOG.md).
 
-1. **Secret-file deny** — any tool whose `canonical_path` is `.env`, `*.pem`, `*.key`, `*.crt`, `*.p12`, `id_rsa`, `id_ed25519`, or `id_dsa` is denied unconditionally. The SDK resolves symlinks and `..` before the predicate runs.
-2. **Workspace containment** — file tools are restricted to the session workspace directory.
-3. **Shell approval** — all `run_command` calls require explicit human approval via `/agy:approve`.
-
-Policy evaluation is fully delegated to the SDK's `policy.enforce()`. Antigravity does not hand-roll a policy evaluator.
+License: Apache-2.0 — see [LICENSE](LICENSE).
