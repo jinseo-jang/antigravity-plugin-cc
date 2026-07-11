@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Sync the display/changelog version across the metadata files. These are advertised-
-# version fields only; keeping them in sync avoids a confusing mismatch between what the
-# plugin reports and the changelog.
+# Sync the version across the metadata files (pyproject, plugin.json, marketplace.json,
+# CHANGELOG). The plugin.json version also gates the backend reinstall in session_start.sh,
+# so bumping it is how a release reaches existing users.
 #
 # Files updated:
 #   pyproject.toml                     version = "X.Y.Z"

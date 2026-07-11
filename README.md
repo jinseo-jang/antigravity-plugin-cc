@@ -26,7 +26,7 @@ Install from the Claude Code plugin marketplace (two steps):
 /plugin install agy@agy
 ```
 
-**No manual `pip install` needed.** On the first session after install, a bundled `SessionStart` hook installs the Python backend straight from this GitHub repo (`pip install "git+https://github.com/jinseo-jang/antigravity-plugin-cc@main#egg=claude-antigravity-orchestrator[sdk]"`, which includes the `google-antigravity` SDK) into the plugin's private data directory and adds that directory to its Python path — you never run `pip` yourself. Installing into a private `--target` directory works even on externally-managed (PEP 668) systems, and it runs once (delete `<plugin-data>/.cao_installed` to reinstall or pick up updates).
+**No manual `pip install` needed.** On the first session after install, a bundled `SessionStart` hook installs the Python backend straight from this GitHub repo (`pip install "git+https://github.com/jinseo-jang/antigravity-plugin-cc@main#egg=claude-antigravity-orchestrator[sdk]"`, which includes the `google-antigravity` SDK) into the plugin's private data directory and adds that directory to its Python path — you never run `pip` yourself. Installing into a private `--target` directory works even on externally-managed (PEP 668) systems, and it re-runs whenever the plugin's on-disk version changes — so updating the plugin upgrades the backend too (see the FAQ).
 
 **Prerequisites you do need:**
 
@@ -189,6 +189,8 @@ export CAO_PLUGIN_DATA="$HOME/.local/share/cao"
 ```
 
 State then lives under `$CAO_PLUGIN_DATA/state/<workspace>-<hash>/` (`events.jsonl`, `digest.md`, `trajectories/<id>/<conversation_id>.db`, a private `shadow.git`, ...). `approvals.json` and `defaults.json` are always persistent (`~/.config/cao`, or `$CAO_PLUGIN_DATA` if set).
+
+**How do I upgrade to a new version?** The backend reinstalls itself whenever the plugin's on-disk version (`plugin.json`) changes — so updating the plugin through Claude Code's plugin manager (which refreshes its files) upgrades the backend on the next session. To force a reinstall at any time, delete `<plugin-data>/.cao_installed`.
 
 **What is the "digest"?** After each session the daemon writes a compact Markdown summary (`digest.md` / `digest-<session_id>.md`) — events, approvals, and a `Changed Files` git-diff. It's how you review a run without watching it live (`/agy:events`).
 

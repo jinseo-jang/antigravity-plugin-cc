@@ -29,17 +29,17 @@ pip install -e ".[dev,sdk]"
 
 ## Releasing (maintainers)
 
-The plugin installs its backend directly from GitHub `main` (see `plugin/hooks/session_start.sh`), so **merging to `main` ships it** — there is no PyPI publish step. New installs get `main`; existing installs re-fetch when their `.cao_installed` marker is deleted.
+The plugin installs its backend directly from GitHub `main` (see `plugin/hooks/session_start.sh`), so **merging to `main` ships it** — there is no PyPI publish step.
 
-Version fields (`pyproject.toml`, `plugin/.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `CHANGELOG.md`) are display/changelog metadata. To cut a marked version:
+**Bumping the version is what upgrades existing users.** The install hook reinstalls the backend whenever the plugin version (`plugin/.claude-plugin/plugin.json`) changes. So a release is: bump the version, merge, and users get the new backend the next time they update the plugin. To cut one:
 
 ```bash
-scripts/bump-version.sh 0.2.0     # syncs the version fields (run with --self-check to verify)
+scripts/bump-version.sh 0.2.0     # syncs pyproject / plugin.json / marketplace.json / CHANGELOG (run --self-check to verify)
 # fill in the new CHANGELOG.md entry, then:
 git commit -am "chore: release v0.2.0" && git tag v0.2.0 && git push origin main --tags
 ```
 
-Optionally publish a GitHub Release for the tag; `.github/release.yml` groups the notes by PR label.
+Optionally publish a GitHub Release for the tag; `.github/release.yml` groups the notes by PR label. (For same-version dev iteration, delete `<plugin-data>/.cao_installed` to force a backend reinstall.)
 
 ## What to expect
 
