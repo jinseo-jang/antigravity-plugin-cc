@@ -1,7 +1,8 @@
 {
   "name": "agy-plugin-cc",
   "owner": {
-    "name": "jinseo-jang"
+    "name": "jinseo-jang",
+    "email": "jinseo.jang@gmail.com"
   },
   "description": "Antigravity Plugin for Claude Code — Claude supervises a Google Antigravity SDK (Gemini) worker with policy-gated tools, human shell approval, and per-session git-diff digests.",
   "plugins": [
