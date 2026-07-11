@@ -29,16 +29,17 @@ pip install -e ".[dev,sdk]"
 
 ## Releasing (maintainers)
 
-The version is pinned in five files (`pyproject.toml`, `plugin/.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, the `session_start.sh` install pin, and `CHANGELOG.md`). Bump them all at once, then tag and release:
+The plugin installs its backend directly from GitHub `main` (see `plugin/hooks/session_start.sh`), so **merging to `main` ships it** — there is no PyPI publish step. New installs get `main`; existing installs re-fetch when their `.cao_installed` marker is deleted.
+
+Version fields (`pyproject.toml`, `plugin/.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `CHANGELOG.md`) are display/changelog metadata. To cut a marked version:
 
 ```bash
-scripts/bump-version.sh 0.2.0     # syncs all 5 pins (run with --self-check to verify the logic)
-# then fill in the new CHANGELOG.md entry
-git commit -am "chore: release v0.2.0" && git tag v0.2.0
-git push origin main --tags
+scripts/bump-version.sh 0.2.0     # syncs the version fields (run with --self-check to verify)
+# fill in the new CHANGELOG.md entry, then:
+git commit -am "chore: release v0.2.0" && git tag v0.2.0 && git push origin main --tags
 ```
 
-Publishing a GitHub Release for the tag triggers `.github/workflows/publish.yml`, which builds and uploads `claude-antigravity-orchestrator` to PyPI via Trusted Publishing (OIDC). `.github/release.yml` groups the notes by PR label.
+Optionally publish a GitHub Release for the tag; `.github/release.yml` groups the notes by PR label.
 
 ## What to expect
 
