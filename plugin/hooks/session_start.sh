@@ -4,11 +4,14 @@
 
 set -euo pipefail
 
-PLUGIN_DATA="${CLAUDE_PLUGIN_DATA:-${CAO_PLUGIN_DATA:-}}"
-if [[ -z "${PLUGIN_DATA}" ]]; then
-  echo "Antigravity: CLAUDE_PLUGIN_DATA is not set; cannot install the cao package." >&2
-  exit 0
-fi
+# Resolve the backend base the SAME way the companion (slash commands) and src/cao/* resolve state:
+# CAO_PLUGIN_DATA else ~/.config/cao. NOT CLAUDE_PLUGIN_DATA — Claude Code exports that to hooks only,
+# never to slash commands, so installing there left the backend unfindable at command time (the
+# "cannot import cao.runtime" / "daemon did not become ready" bug).
+# ponytail: files under ~/.config/cao are not auto-removed on plugin uninstall and are shared across
+# installs; fine for a single plugin — set CAO_PLUGIN_DATA to relocate/isolate.
+PLUGIN_DATA="${CAO_PLUGIN_DATA:-${HOME}/.config/cao}"
+mkdir -p "${PLUGIN_DATA}"
 
 SITE_PACKAGES="${PLUGIN_DATA}/site-packages"
 MARKER="${PLUGIN_DATA}/.cao_installed"

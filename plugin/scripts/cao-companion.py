@@ -21,13 +21,16 @@ import tempfile
 import time
 from typing import Any, cast
 
-# plugin.json SessionStart hook installs cao to CLAUDE_PLUGIN_DATA/site-packages.
-# Ensure it is in sys.path so we can import cao.
-_plugin_data = os.environ.get("CLAUDE_PLUGIN_DATA") or os.environ.get("CAO_PLUGIN_DATA")
-if _plugin_data:
-    _site_packages = str(Path(_plugin_data) / "site-packages")
-    if _site_packages not in sys.path:
-        sys.path.insert(0, _site_packages)
+# The SessionStart hook installs the cao backend into "<base>/site-packages". Resolve <base> the
+# SAME way the hook and src/cao/* do — CAO_PLUGIN_DATA else ~/.config/cao — and NEVER via
+# CLAUDE_PLUGIN_DATA: Claude Code exports CLAUDE_PLUGIN_DATA to hooks only, not to slash commands, so
+# relying on it here left the backend unfindable at command time. Put site-packages on sys.path (our
+# own imports) and, in _autostart_daemon, on the daemon subprocess's PYTHONPATH (a sys.path insert
+# does not propagate to a child process).
+_CAO_BASE = os.environ.get("CAO_PLUGIN_DATA") or os.path.join(os.path.expanduser("~"), ".config", "cao")
+_SITE_PACKAGES = os.path.join(_CAO_BASE, "site-packages")
+if os.path.isdir(_SITE_PACKAGES) and _SITE_PACKAGES not in sys.path:
+    sys.path.insert(0, _SITE_PACKAGES)
 
 
 _POLL_INTERVAL: float = 0.2
@@ -119,9 +122,15 @@ def _is_daemon_alive(sock_path: Path) -> bool:
 
 def _autostart_daemon(sock_path: Path) -> None:
     """Spawn daemon detached; ping-poll until ready or timeout → exit 1."""
+    # The daemon runs in a NEW process, so our sys.path insert does not reach it; hand the backend to
+    # it on PYTHONPATH (prepended, preserving any existing value) so `-m cao.runtime.daemon` resolves.
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join(
+        [_SITE_PACKAGES, env["PYTHONPATH"]] if env.get("PYTHONPATH") else [_SITE_PACKAGES]
+    )
     subprocess.Popen(
         [sys.executable, "-m", "cao.runtime.daemon"],
-        env=dict(os.environ),
+        env=env,
         start_new_session=True,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -333,7 +342,11 @@ def _handle_setup(argv: list[str]) -> None:
     try:
         from cao.runtime import compat, defaults
     except ImportError as exc:
-        print(f"Antigravity: cannot import cao.runtime ({exc}). Is PYTHONPATH=src set?", flush=True)
+        print(
+            f"Antigravity: backend not installed yet ({exc}). The SessionStart hook installs it into "
+            f"{_SITE_PACKAGES}; wait a few seconds and re-run, or check {_CAO_BASE}/.cao_install.log.",
+            flush=True,
+        )
         sys.exit(1)
 
     msg = compat.check_model(data.get("model"))
