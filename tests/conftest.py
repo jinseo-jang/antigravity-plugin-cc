@@ -42,3 +42,21 @@ def _stub_keychain(monkeypatch: pytest.MonkeyPatch) -> None:
     import keyring
 
     monkeypatch.setattr(keyring, "get_password", lambda *_a, **_k: None)
+
+
+@pytest.fixture(autouse=True)
+def _stub_adc(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hermeticity: resolve_auth falls back to gcloud ADC for the Vertex project. Stub
+    google.auth.default to yield no project so the suite never reads the developer's real
+    ADC; ADC tests override _detect_adc_project (or google.auth.default) themselves."""
+    import google.auth
+
+    monkeypatch.setattr(google.auth, "default", lambda *_a, **_k: (None, None))
+
+
+@pytest.fixture(autouse=True)
+def _clear_ambient_auth_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hermeticity: never let a maintainer's real GOOGLE_CLOUD_PROJECT / GEMINI_API_KEY
+    leak into resolve_auth tests. Tests that need them set them explicitly."""
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)

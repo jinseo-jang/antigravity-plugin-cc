@@ -322,3 +322,98 @@ def test_read_keychain_never_raises_on_fail_backend(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(keyring, "get_password", _boom)
     assert _authmod._read_keychain() is None
 
+
+# ── Vertex ADC project auto-detection (gcloud ADC login, no env vars) ────────
+
+def test_adc_project_used_when_no_env_or_key(
+    _isolate_defaults: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADC-only (gcloud auth application-default login) with no GOOGLE_CLOUD_PROJECT and no
+    key -> vertex mode using the ADC-detected project; location defaults to global."""
+    monkeypatch.setattr(_authmod, "_read_keychain", lambda: None, raising=False)
+    monkeypatch.setattr(_authmod, "_detect_adc_project", lambda: "adc-proj", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.delenv("GOOGLE_CLOUD_LOCATION", raising=False)
+    auth = resolve_auth(None)
+    assert auth.mode == "vertex"
+    assert auth.project == "adc-proj"
+    assert auth.location == "global"
+
+
+def test_env_project_wins_over_adc(
+    _isolate_defaults: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Explicit GOOGLE_CLOUD_PROJECT beats ADC auto-detect."""
+    monkeypatch.setattr(_authmod, "_read_keychain", lambda: None, raising=False)
+    monkeypatch.setattr(_authmod, "_detect_adc_project", lambda: "adc-loses", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "explicit-proj")
+    auth = resolve_auth(None)
+    assert auth.mode == "vertex"
+    assert auth.project == "explicit-proj"
+
+
+def test_no_adc_no_env_no_key_still_raises(
+    _isolate_defaults: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADC absent (returns None) + no env + no key -> AuthNotConfigured (no silent success)."""
+    monkeypatch.setattr(_authmod, "_read_keychain", lambda: None, raising=False)
+    monkeypatch.setattr(_authmod, "_detect_adc_project", lambda: None, raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    with pytest.raises(AuthNotConfigured):
+        resolve_auth(None)
+
+
+def test_gemini_key_beats_adc(
+    _isolate_defaults: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A resolved Gemini key wins over Vertex; ADC is never consulted."""
+    consulted = {"adc": False}
+
+    def _spy() -> str:
+        consulted["adc"] = True
+        return "adc-proj"
+
+    monkeypatch.setattr(_authmod, "_read_keychain", lambda: None, raising=False)
+    monkeypatch.setattr(_authmod, "_detect_adc_project", _spy, raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "the-key")
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    auth = resolve_auth(None)
+    assert auth.mode == "gemini_api_key"
+    assert auth.api_key == "the-key"
+    assert consulted["adc"] is False
+
+
+def test_config_vertex_uses_adc_when_no_project(
+    _isolate_defaults: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """defaults.json mode=vertex with no project + no GOOGLE_CLOUD_PROJECT -> ADC project."""
+    monkeypatch.setattr(_authmod, "_detect_adc_project", lambda: "adc-proj", raising=False)
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.delenv("GOOGLE_CLOUD_LOCATION", raising=False)
+    auth = resolve_auth({"mode": "vertex", "model": "gemini-3.5-flash"})
+    assert auth.mode == "vertex"
+    assert auth.project == "adc-proj"
+    assert auth.location == "global"
+
+
+def test_detect_adc_project_never_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Headless-safety: a broken/absent ADC (google.auth.default raises) yields None."""
+    import google.auth
+
+    def _boom(*_a: object, **_k: object) -> object:
+        raise RuntimeError("no ADC")
+
+    monkeypatch.setattr(google.auth, "default", _boom)
+    assert _authmod._detect_adc_project() is None
+
+
+def test_detect_adc_project_returns_project(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_detect_adc_project returns the project id from google.auth.default()."""
+    import google.auth
+
+    monkeypatch.setattr(google.auth, "default", lambda *_a, **_k: (object(), "proj-y"))
+    assert _authmod._detect_adc_project() == "proj-y"
+

@@ -25,8 +25,9 @@ class AuthNotConfigured(Exception):
     """No credential path is configured.
 
     Set one of:
+      • gcloud ADC — Vertex AI: ``gcloud auth application-default login`` with an
+        active project (``gcloud config set project``); GOOGLE_CLOUD_PROJECT optional
       • GEMINI_API_KEY — Gemini API (api_key= mode)
-      • GOOGLE_CLOUD_PROJECT + ADC — Vertex AI (vertex= mode)
 
     Or run ``/agy:setup`` to write defaults.json
     (``$CAO_PLUGIN_DATA/defaults.json`` or ``~/.config/cao/defaults.json``).
@@ -35,8 +36,9 @@ class AuthNotConfigured(Exception):
     def __init__(self) -> None:
         super().__init__(
             "No credentials configured. "
-            "Set GEMINI_API_KEY for Gemini API, or set GOOGLE_CLOUD_PROJECT "
-            "(with Application Default Credentials) for Vertex AI. "
+            "For Vertex AI, run `gcloud auth application-default login` (with an active "
+            "project via `gcloud config set project`) - no env vars needed. "
+            "For the Gemini API, set GEMINI_API_KEY. "
             "Or run /agy:setup to persist defaults.json."
         )
 
@@ -102,6 +104,22 @@ def _resolve_api_key(
     return None
 
 
+def _detect_adc_project() -> str | None:
+    """Return the GCP project from Application Default Credentials, or None.
+
+    Lets ``gcloud auth application-default login`` alone (no GOOGLE_CLOUD_PROJECT) work:
+    for user credentials ``google.auth.default()`` reads the active gcloud-config project.
+    Never raises: absent/broken ADC must fall through to AuthNotConfigured, not crash.
+    """
+    try:
+        import google.auth  # ponytail: deferred — ships with google-genai; probes gcloud/metadata
+
+        _creds, project = google.auth.default()
+    except Exception:  # noqa: BLE001 — any ADC failure means "no ADC project"
+        return None
+    return project or None
+
+
 def resolve_auth(config: dict[str, Any] | None = None) -> AuthConfig:
     """Resolve credentials: explicit config dict first, then env vars.
 
@@ -134,7 +152,7 @@ def resolve_auth(config: dict[str, Any] | None = None) -> AuthConfig:
             return AuthConfig(
                 mode="vertex",
                 model=model,
-                project=str(config["project"]) if config.get("project") else os.environ.get("GOOGLE_CLOUD_PROJECT"),
+                project=str(config["project"]) if config.get("project") else os.environ.get("GOOGLE_CLOUD_PROJECT") or _detect_adc_project(),
                 location=str(config["location"]) if config.get("location") else os.environ.get("GOOGLE_CLOUD_LOCATION", _DEFAULT_LOCATION),
                 api_key=None,
             )
@@ -152,7 +170,7 @@ def resolve_auth(config: dict[str, Any] | None = None) -> AuthConfig:
             source=source,
         )
 
-    project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+    project = os.environ.get("GOOGLE_CLOUD_PROJECT") or _detect_adc_project()
     if project:
         return AuthConfig(
             mode="vertex",
