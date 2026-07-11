@@ -201,23 +201,6 @@ State then lives under `$CAO_PLUGIN_DATA/state/<workspace>-<hash>/` (`events.jso
 
 ---
 
-## Releases
-
-Versioned with [SemVer](https://semver.org). Cutting a release:
-
-1. **Bump every version pin at once.** The version is pinned in five files (`pyproject.toml`, `plugin/.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, the `session_start.sh` install pin, and `CHANGELOG.md`); a drifted pin makes the install hook fetch a nonexistent backend version, so use the helper:
-   ```bash
-   scripts/bump-version.sh 0.2.0        # (scripts/bump-version.sh --self-check verifies the logic)
-   ```
-2. **Fill in the new `CHANGELOG.md` entry, commit, and tag:**
-   ```bash
-   git commit -am "chore: release v0.2.0" && git tag v0.2.0
-   git push origin main --tags
-   ```
-3. **Publish a GitHub Release** for the tag. [`.github/workflows/publish.yml`](.github/workflows/publish.yml) then builds and uploads `claude-antigravity-orchestrator` to PyPI via Trusted Publishing (OIDC); [`.github/release.yml`](.github/release.yml) groups the notes by PR label (`breaking` / `enhancement` / `bug` / `documentation`).
-
----
-
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [CHANGELOG.md](CHANGELOG.md).

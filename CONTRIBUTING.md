@@ -29,11 +29,16 @@ pip install -e ".[dev,sdk]"
 
 ## Releasing (maintainers)
 
-Bump every version pin in one shot, then tag — see the [Releases](README.md#releases) section:
+The version is pinned in five files (`pyproject.toml`, `plugin/.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, the `session_start.sh` install pin, and `CHANGELOG.md`). Bump them all at once, then tag and release:
 
 ```bash
-scripts/bump-version.sh 0.2.0
+scripts/bump-version.sh 0.2.0     # syncs all 5 pins (run with --self-check to verify the logic)
+# then fill in the new CHANGELOG.md entry
+git commit -am "chore: release v0.2.0" && git tag v0.2.0
+git push origin main --tags
 ```
+
+Publishing a GitHub Release for the tag triggers `.github/workflows/publish.yml`, which builds and uploads `claude-antigravity-orchestrator` to PyPI via Trusted Publishing (OIDC). `.github/release.yml` groups the notes by PR label.
 
 ## What to expect
 
