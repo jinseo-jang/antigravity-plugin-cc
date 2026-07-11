@@ -51,7 +51,7 @@ Then `gcloud auth application-default login` so Vertex has credentials.
 
 ```
 /plugin marketplace add jinseo-jang/antigravity-plugin-cc
-/plugin install agy@agy
+/plugin install agy@agy-plugin-cc
 ```
 
 The plugin's **worker** uses Gemini via Vertex ADC — with `gcloud auth application-default login`

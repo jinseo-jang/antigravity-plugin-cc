@@ -8,7 +8,7 @@ A Claude Code plugin that turns Claude into a supervisor for a [Google Antigravi
 
 ```
 /plugin marketplace add jinseo-jang/antigravity-plugin-cc
-/plugin install agy@agy
+/plugin install agy@agy-plugin-cc
 ```
 
 Then pick an auth mode below, open a project, and run `/agy:implement <task>`.
@@ -23,7 +23,7 @@ Install from the Claude Code plugin marketplace (two steps):
 # 1. register this repo as a plugin marketplace
 /plugin marketplace add jinseo-jang/antigravity-plugin-cc
 # 2. install the "agy" plugin from it (plugin-name@marketplace-name)
-/plugin install agy@agy
+/plugin install agy@agy-plugin-cc
 ```
 
 **No manual `pip install` needed.** On the first session after install, a bundled `SessionStart` hook installs the Python backend from this GitHub repo — pinned to the git tag matching the plugin's version (`pip install "claude-antigravity-orchestrator[sdk] @ git+https://github.com/jinseo-jang/antigravity-plugin-cc@v<version>"`, which includes the `google-antigravity` SDK) — into the plugin's private data directory and adds that directory to its Python path, so you never run `pip` yourself. Installing into a private `--target` directory works even on externally-managed (PEP 668) systems, and it re-installs whenever that version changes, so updating the plugin upgrades the backend too (see the FAQ). Contributors can set `CAO_BACKEND_REF=main` to install from `main` instead of a release tag — note this installs `main` **once**; delete `<plugin-data>/.cao_installed` to re-pull newer commits.
