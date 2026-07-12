@@ -39,6 +39,14 @@ def _backend_present() -> bool:
     return importlib.util.find_spec("cao") is not None
 
 
+def _daemon_importable() -> bool:
+    """True if `python -m cao.runtime.daemon` can resolve (parent + submodule)."""
+    try:
+        return importlib.util.find_spec("cao.runtime.daemon") is not None
+    except ModuleNotFoundError:
+        return False
+
+
 # Shown when the backend is missing. Root cause: SessionStart (which installs it) does NOT
 # fire on a mid-session `/plugin install` or `/reload-plugins`; only a fresh session does.
 _NOT_INSTALLED_MSG = (
@@ -463,10 +471,6 @@ def main() -> None:
         _handle_setup(sys.argv[2:])
         return
 
-    if not _backend_present():
-        print(_NOT_INSTALLED_MSG, flush=True)
-        sys.exit(1)
-
     # Join all trailing tokens: Claude's Bash tool passes multi-word args as
     # separate argv (e.g. `session.approve 4 project`), not one quoted string.
     raw_args = " ".join(sys.argv[2:])
@@ -475,6 +479,12 @@ def main() -> None:
 
     # CAO_NO_AUTOSTART=1: skip autostart (used by SessionEnd hook — skip silently if down)
     no_autostart = os.environ.get("CAO_NO_AUTOSTART") == "1"
+
+    if not _daemon_importable():
+        if no_autostart:
+            sys.exit(0)  # SessionEnd path: stay silent when backend absent
+        print(_NOT_INSTALLED_MSG, flush=True)
+        sys.exit(1)
 
     if not _is_daemon_alive(sock):
         if no_autostart:

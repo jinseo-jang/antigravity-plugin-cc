@@ -146,3 +146,25 @@ def test_daemon_path_reports_restart_fast_when_backend_absent(tmp_path: Path) ->
     assert result.returncode == 1, result.stdout + result.stderr
     assert "Restart Claude Code" in result.stdout, result.stdout + result.stderr
     assert "daemon did not become ready" not in result.stdout, result.stdout + result.stderr
+
+
+def test_session_end_stays_silent_when_backend_absent(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+
+    # Clean slash-command env, no cao installed anywhere under $HOME/.config/cao.
+    env = {
+        "HOME": str(home),
+        "PATH": os.environ.get("PATH", ""),
+        "CAO_NO_AUTOSTART": "1",
+    }
+    result = subprocess.run(
+        [sys.executable, str(_COMPANION_PATH), "session.end"],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.strip() == "", result.stdout + result.stderr
