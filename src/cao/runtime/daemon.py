@@ -492,6 +492,10 @@ async def serve(sock_path: Path) -> None:
 
     workspace = ws.resolve_workspace()
     state_dir = compute_state_dir(workspace)
+    file_handler = logging.FileHandler(state_dir / "daemon.log")
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s"))
+    logging.getLogger().addHandler(file_handler)
     event_bus = EventBus(state_dir)
     from cao.runtime.digest_generator import DigestGenerator
     from cao.runtime.git_diff_collector import GitDiffCollector

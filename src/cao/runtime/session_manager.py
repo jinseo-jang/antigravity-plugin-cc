@@ -175,9 +175,19 @@ class SessionManager:
         except asyncio.CancelledError:
             self.transition(session_id, "cancelled")
             raise
-        except Exception:
+        except Exception as exc:
             logger.exception("session %s task crashed", session_id)
             self.transition(session_id, "crashed")
+            crash_publish: _AsyncPublish = (
+                make_publish_wrapper(self._event_bus)
+                if self._event_bus is not None
+                else _noop_publish
+            )
+            await crash_publish(
+                session_id,
+                "session.ended",
+                {"status": "crashed", "reason": f"{type(exc).__name__}: {exc}"},
+            )
         finally:
             self._tasks.pop(session_id, None)
             for slug, sid in list(self._active.items()):

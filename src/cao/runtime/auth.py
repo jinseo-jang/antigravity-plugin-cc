@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import os
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -104,20 +106,44 @@ def _resolve_api_key(
     return None
 
 
-def _detect_adc_project() -> str | None:
-    """Return the GCP project from Application Default Credentials, or None.
+def _adc_file_path() -> Path:
+    override = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    return Path(override) if override else Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
 
-    Lets ``gcloud auth application-default login`` alone (no GOOGLE_CLOUD_PROJECT) work:
-    for user credentials ``google.auth.default()`` reads the active gcloud-config project.
-    Never raises: absent/broken ADC must fall through to AuthNotConfigured, not crash.
+
+def _detect_adc_project() -> str | None:
+    """Return the GCP project for Vertex, or None. Never raises.
+
+    Order: google.auth.default() (env / gcloud / service account) → the ADC file's
+    quota_project_id (set by `gcloud auth application-default login`; google.auth.default()
+    does NOT return it for authorized_user creds) → `gcloud config get-value project`.
     """
     try:
         import google.auth  # ponytail: deferred — ships with google-genai; probes gcloud/metadata
 
         _creds, project = google.auth.default()
-    except Exception:  # noqa: BLE001 — any ADC failure means "no ADC project"
-        return None
-    return project or None
+        if project:
+            return str(project)
+    except Exception:  # noqa: BLE001 — any ADC failure falls through to the next source
+        pass
+    try:
+        raw = json.loads(_adc_file_path().read_text(encoding="utf-8"))
+        qp = raw.get("quota_project_id")
+        if qp:
+            return str(qp)
+    except (OSError, ValueError):
+        pass
+    try:
+        out = subprocess.run(
+            ["gcloud", "config", "get-value", "project"],
+            capture_output=True, text=True, timeout=5,
+        )
+        val = out.stdout.strip()
+        if val and val != "(unset)":
+            return val
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return None
 
 
 def resolve_auth(config: dict[str, Any] | None = None) -> AuthConfig:
@@ -149,10 +175,16 @@ def resolve_auth(config: dict[str, Any] | None = None) -> AuthConfig:
                 source=source,
             )
         if mode == "vertex":
+            project = (
+                str(config["project"]) if config.get("project")
+                else os.environ.get("GOOGLE_CLOUD_PROJECT") or _detect_adc_project()
+            )
+            if not project:
+                raise AuthNotConfigured()
             return AuthConfig(
                 mode="vertex",
                 model=model,
-                project=str(config["project"]) if config.get("project") else os.environ.get("GOOGLE_CLOUD_PROJECT") or _detect_adc_project(),
+                project=project,
                 location=str(config["location"]) if config.get("location") else os.environ.get("GOOGLE_CLOUD_LOCATION", _DEFAULT_LOCATION),
                 api_key=None,
             )

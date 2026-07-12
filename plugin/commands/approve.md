@@ -7,4 +7,4 @@ allowed-tools:
 
 Approve a pending tool call. The daemon will resume the suspended hook coroutine.
 
-!python "${CLAUDE_PLUGIN_ROOT}/scripts/cao-companion.py" session.approve "$ARGUMENTS"
+!python "${CLAUDE_PLUGIN_ROOT}/scripts/cao-companion.py" --plugin-data "${CLAUDE_PLUGIN_DATA}" session.approve "$ARGUMENTS"

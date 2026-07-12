@@ -8,12 +8,12 @@ allowed-tools:
 
 Retry the session from a failure point using a named retry strategy.
 
-!python "${CLAUDE_PLUGIN_ROOT}/scripts/cao-companion.py" session.retry "$ARGUMENTS"
+!python "${CLAUDE_PLUGIN_ROOT}/scripts/cao-companion.py" --plugin-data "${CLAUDE_PLUGIN_DATA}" session.retry "$ARGUMENTS"
 
 The command above prints a JSON object with a `session_id`. Supervise that session
 until it finishes, using the Antigravity companion via the Bash tool:
 
-1. Watch: run `python "${CLAUDE_PLUGIN_ROOT}/scripts/cao-companion.py" session.wait <session_id>`.
+1. Watch: run `python "${CLAUDE_PLUGIN_ROOT}/scripts/cao-companion.py" --plugin-data "${CLAUDE_PLUGIN_DATA}" session.wait <session_id>`.
    It blocks up to ~25s and returns a pending approval, "running", or "finished".
 2. If it reports "running", run `session.wait <session_id>` again.
 3. If it reports a **pending approval**, call the **AskUserQuestion** tool showing the

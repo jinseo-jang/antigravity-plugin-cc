@@ -118,7 +118,7 @@ def test_setup_reports_restart_when_backend_absent(tmp_path: Path) -> None:
     # Clean slash-command env, no cao installed anywhere under $HOME/.config/cao.
     env = {"HOME": str(home), "PATH": os.environ.get("PATH", "")}
     result = subprocess.run(
-        [sys.executable, str(_COMPANION_PATH), "setup", "--mode", "vertex", "--model", "gemini-3.5-flash"],
+        [sys.executable, "-S", str(_COMPANION_PATH), "setup", "--mode", "vertex", "--model", "gemini-3.5-flash"],
         env=env,
         capture_output=True,
         text=True,
@@ -136,7 +136,7 @@ def test_daemon_path_reports_restart_fast_when_backend_absent(tmp_path: Path) ->
     # Clean slash-command env, no cao installed anywhere under $HOME/.config/cao.
     env = {"HOME": str(home), "PATH": os.environ.get("PATH", "")}
     result = subprocess.run(
-        [sys.executable, str(_COMPANION_PATH), "session.status"],
+        [sys.executable, "-S", str(_COMPANION_PATH), "session.status"],
         env=env,
         capture_output=True,
         text=True,
@@ -146,6 +146,48 @@ def test_daemon_path_reports_restart_fast_when_backend_absent(tmp_path: Path) ->
     assert result.returncode == 1, result.stdout + result.stderr
     assert "Restart Claude Code" in result.stdout, result.stdout + result.stderr
     assert "daemon did not become ready" not in result.stdout, result.stdout + result.stderr
+
+
+def test_plugin_data_flag_sets_base_and_is_stripped(tmp_path: Path) -> None:
+    """`--plugin-data <dir>` (from ${CLAUDE_PLUGIN_DATA}) must locate the backend without
+    CAO_PLUGIN_DATA in the env, and be stripped before method parsing runs."""
+    home = tmp_path / "home"
+    home.mkdir()
+    env = {"HOME": str(home), "PATH": os.environ.get("PATH", "")}
+
+    # (a) backend present at --plugin-data base → detected, no "not installed" message.
+    # session.status goes through main()'s _daemon_importable() check, which needs the
+    # cao.runtime.daemon submodule to resolve (not just the top-level cao package).
+    # CAO_NO_AUTOSTART=1 skips the (up to 10s) daemon-autostart poll once the backend is
+    # found but no daemon is running — irrelevant to what this test proves.
+    base = tmp_path / "base"
+    runtime = base / "site-packages" / "cao" / "runtime"
+    runtime.mkdir(parents=True)
+    (base / "site-packages" / "cao" / "__init__.py").write_text("")
+    (runtime / "__init__.py").write_text("")
+    (runtime / "daemon.py").write_text("")
+    result = subprocess.run(
+        [sys.executable, "-S", str(_COMPANION_PATH), "session.status", "--plugin-data", str(base)],
+        env={**env, "CAO_NO_AUTOSTART": "1"},
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    assert "Restart Claude Code" not in result.stdout, result.stdout + result.stderr
+
+    # (b) backend absent at --plugin-data base → still reports restart msg, flag stripped,
+    # method still parsed as session.status (exit 1, not an argv-parsing crash).
+    empty_base = tmp_path / "empty-base"
+    empty_base.mkdir()
+    result = subprocess.run(
+        [sys.executable, "-S", str(_COMPANION_PATH), "session.status", "--plugin-data", str(empty_base)],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "Restart Claude Code" in result.stdout, result.stdout + result.stderr
 
 
 def test_session_end_stays_silent_when_backend_absent(tmp_path: Path) -> None:
@@ -159,7 +201,7 @@ def test_session_end_stays_silent_when_backend_absent(tmp_path: Path) -> None:
         "CAO_NO_AUTOSTART": "1",
     }
     result = subprocess.run(
-        [sys.executable, str(_COMPANION_PATH), "session.end"],
+        [sys.executable, "-S", str(_COMPANION_PATH), "session.end"],
         env=env,
         capture_output=True,
         text=True,

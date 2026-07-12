@@ -12,7 +12,7 @@ the worker continues with the background you built up here — not a cold start.
 This is a **text-only handoff**: the conversation summary carries over, but the
 tool-call history (files read, commands run) does not.
 
-!python "${CLAUDE_PLUGIN_ROOT}/scripts/cao-companion.py" session.handoff "$ARGUMENTS"
+!python "${CLAUDE_PLUGIN_ROOT}/scripts/cao-companion.py" --plugin-data "${CLAUDE_PLUGIN_DATA}" session.handoff "$ARGUMENTS"
 
 The command above prints a JSON object with a `session_id`. Handoff sessions are
 writable (the worker does real work) and can request shell approvals.
@@ -25,7 +25,7 @@ to babysit it. Retrieve results later with `/agy:status <id>`, `/agy:events <id>
 **Foreground (no `--background`):** supervise the session until it finishes,
 using the Antigravity companion via the Bash tool:
 
-1. Watch: run `python "${CLAUDE_PLUGIN_ROOT}/scripts/cao-companion.py" session.wait <session_id>`.
+1. Watch: run `python "${CLAUDE_PLUGIN_ROOT}/scripts/cao-companion.py" --plugin-data "${CLAUDE_PLUGIN_DATA}" session.wait <session_id>`.
    It blocks up to ~25s and returns a pending approval, "running", or "finished".
 2. If it reports "running", run `session.wait <session_id>` again.
 3. If it reports a **pending approval** (a shell command needs a decision), call the

@@ -22,6 +22,24 @@ import tempfile
 import time
 from typing import Any, cast
 
+
+def _bootstrap_plugin_data(argv: list[str]) -> None:
+    """Honor `--plugin-data <dir>` (passed by command .md via the reliably-substituted
+    ${CLAUDE_PLUGIN_DATA}) by exporting it as CAO_PLUGIN_DATA before we resolve the backend.
+    Claude Code does not reliably propagate $CLAUDE_ENV_FILE additions to the Bash-tool env
+    (esp. under --resume), so the SessionStart hook's bridge cannot be relied on; the command
+    passes the data dir explicitly instead. Strips the flag so method parsing is unaffected."""
+    for i, tok in enumerate(argv):
+        if tok == "--plugin-data":
+            val = argv[i + 1] if i + 1 < len(argv) else ""
+            if val:
+                os.environ["CAO_PLUGIN_DATA"] = val
+            del argv[i : i + 2]
+            return
+
+
+_bootstrap_plugin_data(sys.argv)
+
 # The SessionStart hook installs the cao backend into "<base>/site-packages". Resolve <base> the
 # SAME way the hook and src/cao/* do — CAO_PLUGIN_DATA else ~/.config/cao — and NEVER via
 # CLAUDE_PLUGIN_DATA: Claude Code exports CLAUDE_PLUGIN_DATA to hooks only, not to slash commands, so

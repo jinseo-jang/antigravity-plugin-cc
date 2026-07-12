@@ -41,6 +41,7 @@ def test_empty_defaults_regression_raises_when_no_creds(
     """Empty defaults.json, no env → AuthNotConfigured (same as before)."""
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.setattr(_authmod, "_detect_adc_project", lambda: None, raising=False)
     with pytest.raises(AuthNotConfigured):
         resolve_auth(None)
 
@@ -160,6 +161,7 @@ def test_resolve_vertex_default_location(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_resolve_raises_when_no_creds(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.setattr(_authmod, "_detect_adc_project", lambda: None, raising=False)
     with pytest.raises(AuthNotConfigured):
         resolve_auth()
 
@@ -253,7 +255,8 @@ def test_resolve_auth_neither_raises(
     key_file = _isolate_defaults / "gemini_api_key"
     if key_file.exists():
         key_file.unlink()
-        
+
+    monkeypatch.setattr(_authmod, "_detect_adc_project", lambda: None, raising=False)
     with pytest.raises(AuthNotConfigured):
         resolve_auth(None)
 
@@ -399,15 +402,58 @@ def test_config_vertex_uses_adc_when_no_project(
     assert auth.location == "global"
 
 
-def test_detect_adc_project_never_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Headless-safety: a broken/absent ADC (google.auth.default raises) yields None."""
+def test_detect_adc_project_never_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Headless-safety: broken google.auth.default(), no ADC file, no gcloud -> None."""
     import google.auth
 
     def _boom(*_a: object, **_k: object) -> object:
         raise RuntimeError("no ADC")
 
     monkeypatch.setattr(google.auth, "default", _boom)
+    # Isolate from this machine's real ADC file / gcloud config.
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(tmp_path / "missing.json"))
+    monkeypatch.setattr(_authmod.subprocess, "run", lambda *_a, **_k: (_ for _ in ()).throw(OSError()))
     assert _authmod._detect_adc_project() is None
+
+
+# ── C-1: ADC file quota_project_id fallback (authorized_user creds have no `project`
+# from google.auth.default(); the ADC file's quota_project_id is the only source) ──
+
+def test_config_vertex_uses_adc_file_quota_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No config project, no GOOGLE_CLOUD_PROJECT, google.auth.default() -> (None, None),
+    but the ADC file has quota_project_id -> that becomes auth.project."""
+    import google.auth
+
+    monkeypatch.setattr(google.auth, "default", lambda *_a, **_k: (None, None))
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    adc_file = tmp_path / "adc.json"
+    adc_file.write_text(
+        json.dumps({"type": "authorized_user", "quota_project_id": "proj-xyz"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(adc_file))
+    auth = resolve_auth({"mode": "vertex", "model": "gemini-3.5-flash"})
+    assert auth.mode == "vertex"
+    assert auth.project == "proj-xyz"
+
+
+def test_config_vertex_raises_when_no_project_anywhere(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No config project, no env, no ADC file, no gcloud -> AuthNotConfigured (not a
+    silent project=None AuthConfig — that was the crash-causing bug)."""
+    import google.auth
+
+    monkeypatch.setattr(google.auth, "default", lambda *_a, **_k: (None, None))
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(tmp_path / "missing.json"))
+    monkeypatch.setattr(_authmod.subprocess, "run", lambda *_a, **_k: (_ for _ in ()).throw(OSError()))
+    with pytest.raises(AuthNotConfigured):
+        resolve_auth({"mode": "vertex", "model": "gemini-3.5-flash"})
 
 
 def test_detect_adc_project_returns_project(monkeypatch: pytest.MonkeyPatch) -> None:

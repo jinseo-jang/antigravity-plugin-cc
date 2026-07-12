@@ -207,6 +207,12 @@ async def test_start_task_crash_transitions_to_crashed(
     assert crashed is not None
     assert crashed.state == "crashed"
 
+    events = await mgr.get_events(session.session_id)
+    ended = [e for e in events if e.event_type == "session.ended"]
+    assert len(ended) == 1
+    assert ended[0].payload.get("status") == "crashed"
+    assert ended[0].payload.get("reason")  # non-empty, mentions the exception
+
 
 async def test_latest_session_id_none_when_empty() -> None:
     mgr = SessionManager(approval_waiter=ApprovalWaiter())

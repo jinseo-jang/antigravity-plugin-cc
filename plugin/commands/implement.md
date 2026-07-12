@@ -23,7 +23,7 @@ Continuity flags:
 
 When `--file` is an image, the worker should look at the image directly rather than writing throwaway shell scripts to inspect it — unnecessary scripts trigger extra approval prompts.
 
-!python "${CLAUDE_PLUGIN_ROOT}/scripts/cao-companion.py" session.implement "$ARGUMENTS"
+!python "${CLAUDE_PLUGIN_ROOT}/scripts/cao-companion.py" --plugin-data "${CLAUDE_PLUGIN_DATA}" session.implement "$ARGUMENTS"
 
 The command above prints a JSON object with a `session_id`.
 
@@ -35,7 +35,7 @@ then re-run `session.implement` with the corrected args.
 **Foreground (no `--background`):** supervise the session until it finishes,
 using the Antigravity companion via the Bash tool:
 
-1. Watch: run `python "${CLAUDE_PLUGIN_ROOT}/scripts/cao-companion.py" session.wait <session_id>`.
+1. Watch: run `python "${CLAUDE_PLUGIN_ROOT}/scripts/cao-companion.py" --plugin-data "${CLAUDE_PLUGIN_DATA}" session.wait <session_id>`.
    It blocks up to ~25s and returns a pending approval, "running", or "finished".
 2. If it reports "running", run `session.wait <session_id>` again.
 3. If it reports a **pending approval** (a shell command needs a decision), call the

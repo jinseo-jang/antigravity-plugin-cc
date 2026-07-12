@@ -7,4 +7,4 @@ allowed-tools:
 
 Cancel the active session (or a specific session by ID).
 
-!python "${CLAUDE_PLUGIN_ROOT}/scripts/cao-companion.py" session.cancel "$ARGUMENTS"
+!python "${CLAUDE_PLUGIN_ROOT}/scripts/cao-companion.py" --plugin-data "${CLAUDE_PLUGIN_DATA}" session.cancel "$ARGUMENTS"

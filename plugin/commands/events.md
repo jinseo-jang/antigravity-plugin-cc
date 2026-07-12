@@ -7,4 +7,4 @@ allowed-tools:
 
 Show recent session events. Pass an optional session_id and after_event_id to page results.
 
-!python "${CLAUDE_PLUGIN_ROOT}/scripts/cao-companion.py" session.events "$ARGUMENTS"
+!python "${CLAUDE_PLUGIN_ROOT}/scripts/cao-companion.py" --plugin-data "${CLAUDE_PLUGIN_DATA}" session.events "$ARGUMENTS"
