@@ -9,6 +9,8 @@ Tests that specifically exercise the ``~/.config/cao`` fallback ``delenv`` it th
 """
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 
@@ -60,3 +62,39 @@ def _clear_ambient_auth_env(monkeypatch: pytest.MonkeyPatch) -> None:
     leak into resolve_auth tests. Tests that need them set them explicitly."""
     monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _no_ambient_gcp_project(monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory) -> None:
+    """Hermeticity: this dev box has real ADC/gcloud resolving a GCP project, which masks
+    CI (which has none). Neutralize all three sources resolve_auth's _detect_adc_project reads,
+    so tests see 'no project' by default like CI. Tests that need a project set it explicitly
+    (config 'project', GOOGLE_CLOUD_PROJECT, or monkeypatching _detect_adc_project) AFTER this
+    fixture runs, so their override wins. Tests of _detect_adc_project re-patch google.auth /
+    GOOGLE_APPLICATION_CREDENTIALS in their own body, which also overrides this."""
+    try:
+        import google.auth  # noqa: PLC0415
+
+        monkeypatch.setattr(google.auth, "default", lambda *a, **k: (None, None))
+    except Exception:  # noqa: BLE001
+        pass
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(tmp_path_factory.mktemp("no_adc") / "nope.json"))
+    monkeypatch.setenv("CLOUDSDK_CONFIG", str(tmp_path_factory.mktemp("no_gcloud")))
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.delenv("GCLOUD_PROJECT", raising=False)
+
+    # ponytail: this box is a GCE-backed dev workstation with a live metadata server, so
+    # `gcloud config get-value project` falls back to it and returns a real project even
+    # with CLOUDSDK_CONFIG pointed at an empty dir (CI has neither gcloud nor metadata).
+    # Block only the gcloud argv tier-3 uses; every other subprocess.run call (git, bash
+    # hooks, companion tests) passes through untouched.
+    import subprocess as _subprocess  # noqa: PLC0415
+
+    _real_run = _subprocess.run
+
+    def _no_gcloud(cmd: Any, *args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+        if isinstance(cmd, (list, tuple)) and cmd and cmd[0] == "gcloud":
+            raise OSError("gcloud disabled for hermetic tests")
+        return _real_run(cmd, *args, **kwargs)
+
+    monkeypatch.setattr(_subprocess, "run", _no_gcloud)

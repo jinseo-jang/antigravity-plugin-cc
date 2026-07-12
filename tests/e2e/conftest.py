@@ -44,8 +44,12 @@ async def git_workspace(tmp_path: Path):
 
 
 @pytest.fixture
-async def daemon_ctx(git_workspace: Path):
+async def daemon_ctx(git_workspace: Path, monkeypatch: pytest.MonkeyPatch):
     """All real runtime components + in-process asyncio Unix socket server."""
+    # session.implement runs SessionManager.run_task in the background, which calls the
+    # real resolve_auth() (no fake there, unlike the hook chain fake_agent drives) — give
+    # it a project so it doesn't crash with AuthNotConfigured under the hermetic fixture.
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "test-proj")
     state_dir = compute_state_dir(git_workspace)
     sock_path = state_dir / "rpc.sock"
 

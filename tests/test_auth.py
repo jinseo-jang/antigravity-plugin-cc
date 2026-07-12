@@ -62,13 +62,17 @@ def test_defaults_full_vertex_all_applied(
     _isolate_defaults: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """defaults with mode+location+model → all applied, no env needed."""
-    _write_defaults(_isolate_defaults, {"mode": "vertex", "location": "global", "model": "gemini-3.5-flash"})
+    _write_defaults(
+        _isolate_defaults,
+        {"mode": "vertex", "location": "global", "model": "gemini-3.5-flash", "project": "test-proj"},
+    )
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
     auth = resolve_auth(None)
     assert auth.mode == "vertex"
     assert auth.location == "global"
     assert auth.model == "gemini-3.5-flash"
+    assert auth.project == "test-proj"
 
 
 def test_precedence_env_model_beats_default_model(
