@@ -28,6 +28,8 @@ Install from the Claude Code plugin marketplace (two steps):
 
 **No manual `pip install` needed.** On the first session after install, a bundled `SessionStart` hook installs the Python backend from this GitHub repo — pinned to the git tag matching the plugin's version (`pip install "claude-antigravity-orchestrator[sdk] @ git+https://github.com/jinseo-jang/antigravity-plugin-cc@v<version>"`, which includes the `google-antigravity` SDK) — into the plugin's private data directory and adds that directory to its Python path, so you never run `pip` yourself. Installing into a private `--target` directory works even on externally-managed (PEP 668) systems, and it re-installs whenever that version changes, so updating the plugin upgrades the backend too (see the FAQ). Contributors can set `CAO_BACKEND_REF=main` to install from `main` instead of a release tag — note this installs `main` **once**; delete `<plugin-data>/.cao_installed` to re-pull newer commits.
 
+**Installing mid-session? Restart once.** The backend installs via a `SessionStart` hook, which Claude Code does **not** fire on a mid-session `/plugin install` (nor on `/reload-plugins`). So right after installing, the first `/agy:*` command will tell you the backend isn't installed yet — just **restart Claude Code once** (a full quit + relaunch) and re-run it. `/clear` and `/reload-plugins` are not reliable substitutes.
+
 **Prerequisites you do need:**
 
 - Python 3.11+, `pip`, and `git` on PATH (the hook runs `pip install git+https://…`)
