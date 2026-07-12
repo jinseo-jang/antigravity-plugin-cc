@@ -109,3 +109,40 @@ def test_autostart_daemon_prepends_site_packages_to_pythonpath(
     parts = env.get("PYTHONPATH", "").split(os.pathsep)
     assert parts[0] == str(site_packages), f"site-packages must be PREPENDED; got {env.get('PYTHONPATH')!r}"
     assert "/preexisting" in parts, f"existing PYTHONPATH must be preserved; got {env.get('PYTHONPATH')!r}"
+
+
+def test_setup_reports_restart_when_backend_absent(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+
+    # Clean slash-command env, no cao installed anywhere under $HOME/.config/cao.
+    env = {"HOME": str(home), "PATH": os.environ.get("PATH", "")}
+    result = subprocess.run(
+        [sys.executable, str(_COMPANION_PATH), "setup", "--mode", "vertex", "--model", "gemini-3.5-flash"],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "Restart Claude Code" in result.stdout, result.stdout + result.stderr
+    assert "wait a few seconds" not in result.stdout, result.stdout + result.stderr
+
+
+def test_daemon_path_reports_restart_fast_when_backend_absent(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+
+    # Clean slash-command env, no cao installed anywhere under $HOME/.config/cao.
+    env = {"HOME": str(home), "PATH": os.environ.get("PATH", "")}
+    result = subprocess.run(
+        [sys.executable, str(_COMPANION_PATH), "session.status"],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "Restart Claude Code" in result.stdout, result.stdout + result.stderr
+    assert "daemon did not become ready" not in result.stdout, result.stdout + result.stderr

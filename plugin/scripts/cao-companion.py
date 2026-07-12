@@ -9,6 +9,7 @@ Zero business logic. Dumb pipe: socket path, autostart, forward, render.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -31,6 +32,20 @@ _CAO_BASE = os.environ.get("CAO_PLUGIN_DATA") or os.path.join(os.path.expanduser
 _SITE_PACKAGES = os.path.join(_CAO_BASE, "site-packages")
 if os.path.isdir(_SITE_PACKAGES) and _SITE_PACKAGES not in sys.path:
     sys.path.insert(0, _SITE_PACKAGES)
+
+
+def _backend_present() -> bool:
+    """True if the cao backend is importable (site-packages dir above, or dev PYTHONPATH)."""
+    return importlib.util.find_spec("cao") is not None
+
+
+# Shown when the backend is missing. Root cause: SessionStart (which installs it) does NOT
+# fire on a mid-session `/plugin install` or `/reload-plugins`; only a fresh session does.
+_NOT_INSTALLED_MSG = (
+    "Antigravity: the Python backend is not installed yet. It installs automatically when a "
+    "Claude Code session starts, but that does NOT happen on a mid-session `/plugin install` "
+    "or `/reload-plugins`. Restart Claude Code once, then re-run this command."
+)
 
 
 _POLL_INTERVAL: float = 0.2
@@ -321,6 +336,10 @@ def _print_pending(result: dict[str, Any]) -> None:
 
 def _handle_setup(argv: list[str]) -> None:
     """Write model/region defaults locally — pure local, no daemon needed."""
+    if not _backend_present():
+        print(_NOT_INSTALLED_MSG, flush=True)
+        sys.exit(1)
+
     flags: dict[str, str] = {}
     i = 0
     while i < len(argv):
@@ -341,12 +360,10 @@ def _handle_setup(argv: list[str]) -> None:
 
     try:
         from cao.runtime import compat, defaults
-    except ImportError as exc:
-        print(
-            f"Antigravity: backend not installed yet ({exc}). The SessionStart hook installs it into "
-            f"{_SITE_PACKAGES}; wait a few seconds and re-run, or check {_CAO_BASE}/.cao_install.log.",
-            flush=True,
-        )
+    except ImportError:
+        # Safety net: _backend_present() already checked the dir exists above; this only
+        # fires on a corrupt/partial install.
+        print(_NOT_INSTALLED_MSG, flush=True)
         sys.exit(1)
 
     msg = compat.check_model(data.get("model"))
@@ -445,6 +462,10 @@ def main() -> None:
     if method == "setup":
         _handle_setup(sys.argv[2:])
         return
+
+    if not _backend_present():
+        print(_NOT_INSTALLED_MSG, flush=True)
+        sys.exit(1)
 
     # Join all trailing tokens: Claude's Bash tool passes multi-word args as
     # separate argv (e.g. `session.approve 4 project`), not one quoted string.
