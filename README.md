@@ -6,12 +6,24 @@ A Claude Code plugin that turns Claude into a supervisor for a [Google Antigravi
 
 ## Quickstart
 
+**1. Install** from the Claude Code plugin marketplace:
+
 ```
 /plugin marketplace add jinseo-jang/antigravity-plugin-cc
 /plugin install agy@agy-plugin-cc
 ```
 
-Then pick an auth mode below, open a project, and run `/agy:implement <task>`.
+Restart Claude Code once after installing so the backend installs itself (details in [Install](#install)), then pick an [auth mode](#auth).
+
+**2. Configure defaults** — run `/agy:setup` and choose `vertex` (Vertex AI via ADC), model `gemini-3.5-flash`, location `global`. Your GCP project is auto-detected from your ADC — no environment variables required.
+
+**3. Run a task** — open a project, then hand the worker something real. For example, generate an image and save it to your workspace:
+
+```
+/agy:implement "Generate an image of Seoul's current weather and save it to ./seoul_weather.png"
+```
+
+agy looks up the current weather, generates the image with Gemini, then asks you to approve writing the file (**Approve once / for this project / always**). After you approve, `seoul_weather.png` is saved into your workspace. Track progress with `/agy:status` and review the run with `/agy:events`.
 
 ---
 
@@ -20,9 +32,7 @@ Then pick an auth mode below, open a project, and run `/agy:implement <task>`.
 Install from the Claude Code plugin marketplace (two steps):
 
 ```
-# 1. register this repo as a plugin marketplace
 /plugin marketplace add jinseo-jang/antigravity-plugin-cc
-# 2. install the "agy" plugin from it (plugin-name@marketplace-name)
 /plugin install agy@agy-plugin-cc
 ```
 
