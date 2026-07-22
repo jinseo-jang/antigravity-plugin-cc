@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/ko/1.0.0/).
 
 ## [Unreleased]
+### Added
+- Added `gemini-3.6-flash` (new default) and `gemini-3.5-flash-lite` to the supported-model allowlist; updated recovery message and docs accordingly.
 
 ## [0.1.2] - 2026-07-12
 ### Fixed

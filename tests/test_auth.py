@@ -192,7 +192,7 @@ def test_resolve_explicit_config_vertex() -> None:
 def test_resolve_default_model(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GEMINI_API_KEY", "k")
     monkeypatch.delenv("CAO_MODEL", raising=False)
-    assert resolve_auth().model == "gemini-3.5-flash"
+    assert resolve_auth().model == "gemini-3.6-flash"
 
 
 def test_resolve_custom_model_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
