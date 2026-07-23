@@ -34,7 +34,7 @@ Any other model string is rejected with `-32602` before the worker starts. **Reg
 **Notes:**
 - `--api-key` is never accepted or stored. Provide the key one of three ways, checked in this order: (1) **OS keychain** — `python -m keyring set cao gemini_api_key` (encrypted at rest, recommended); (2) **`GEMINI_API_KEY` env var** — export it in the shell that launches Claude Code, then restart it (Google's recommended location); (3) **plaintext file** `~/.config/cao/gemini_api_key` (chmod 600) — last resort, **not encrypted**.
 - If the companion warns that no key is found (gemini_api_key mode), point the user at the keychain command first, then the env-var or file fallbacks.
-- **Region is user-selectable.** `global` is the default (works for both models) and is used when you omit `--location`; pick another Vertex region where your model is served. An unavailable model×region is not blocked at setup — it surfaces as a worker timeout, so choose a region where the model actually runs.
+- **Region is user-selectable.** `global` is the default (works for all supported models) and is used when you omit `--location`; pick another Vertex region where your model is served. An unavailable model×region is not blocked at setup — it surfaces as a worker timeout, so choose a region where the model actually runs.
 - `gemini-3.1-pro-preview` is the correct model code for Gemini 3.1 Pro (bare `gemini-3.1-pro` is a 404).
 - Defaults take effect on the **next** session (fresh-read, no daemon restart required).
 - To clear defaults, delete `defaults.json` directly.
