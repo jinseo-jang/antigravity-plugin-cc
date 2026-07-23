@@ -15,7 +15,7 @@ A Claude Code plugin that turns Claude into a supervisor for a [Google Antigravi
 
 Restart Claude Code once after installing so the backend installs itself (details in [Install](#install)), then pick an [auth mode](#auth).
 
-**2. Configure defaults** — run `/agy:setup` and choose `vertex` (Vertex AI via ADC), model `gemini-3.5-flash`, location `global`. Your GCP project is auto-detected from your ADC — no environment variables required.
+**2. Configure defaults** — run `/agy:setup` and choose `vertex` (Vertex AI via ADC), model `gemini-3.6-flash`, location `global`. Your GCP project is auto-detected from your ADC — no environment variables required.
 
 **3. Run a task** — open a project, then hand the worker something real. For example, generate an image and save it to your workspace:
 
@@ -93,10 +93,12 @@ A resolved Gemini key takes precedence over Vertex/ADC. If no key resolves and n
 
 | Model | Status | Default location |
 |---|---|---|
-| `gemini-3.5-flash` | GA (default) | `global` |
+| `gemini-3.6-flash` | GA (**default**) | `global` |
+| `gemini-3.5-flash` | GA | `global` |
+| `gemini-3.5-flash-lite` | GA | `global` |
 | `gemini-3.1-pro-preview` | Public Preview | `global`; narrower regional availability |
 
-Any other model string is rejected immediately with JSON-RPC `-32602` and a recovery message. Override with `CAO_MODEL=gemini-3.5-flash` or `--model` per session. Both models support `--effort` (thinking levels).
+Any other model string is rejected immediately with JSON-RPC `-32602` and a recovery message. Override with `CAO_MODEL=gemini-3.6-flash` or `--model` per session. All models support `--effort` (thinking levels).
 
 **Region is your choice.** agy doesn't hardcode a location allowlist. Pick a Vertex region via `/agy:setup` or `GOOGLE_CLOUD_LOCATION`; these Gemini-3 models are currently served on `global` (the default). Before each Vertex turn agy runs a fast pre-flight probe — a region that definitively doesn't serve your model fails immediately with a clear `-32602` error rather than hanging. (Ambiguous or transient probe failures fall through and can still hang until the worker-turn timeout, so prefer `global` unless you know your region serves the model.)
 

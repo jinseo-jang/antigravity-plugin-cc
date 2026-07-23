@@ -23,6 +23,16 @@ def test_pro_preview_supported() -> None:
     assert check_model("gemini-3.1-pro-preview") is None
 
 
+def test_gemini36_flash_supported() -> None:
+    """Given gemini-3.6-flash (new default), When checked, Then None (supported)."""
+    assert check_model("gemini-3.6-flash") is None
+
+
+def test_gemini35_flash_lite_supported() -> None:
+    """Given gemini-3.5-flash-lite, When checked, Then None (supported)."""
+    assert check_model("gemini-3.5-flash-lite") is None
+
+
 # --- regression: unsupported models are rejected -----------------------------
 
 

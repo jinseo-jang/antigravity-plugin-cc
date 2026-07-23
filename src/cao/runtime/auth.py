@@ -19,7 +19,7 @@ from google.antigravity.models import (  # type: ignore[import-untyped]
 
 from cao.runtime import defaults
 
-_DEFAULT_MODEL = "gemini-3.5-flash"
+_DEFAULT_MODEL = "gemini-3.6-flash"
 _DEFAULT_LOCATION = "global"
 
 
