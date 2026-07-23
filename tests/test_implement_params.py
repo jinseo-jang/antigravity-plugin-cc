@@ -182,7 +182,8 @@ async def test_implement_resume_threads_stored_state(
     monkeypatch.setenv("CAO_PLUGIN_DATA", str(tmp_path / "data"))
     ws = str(tmp_path)
     stored_dir = str(tmp_path / "stored-traj")
-    session_store.record(ws, "old-sess", "conv-abc", stored_dir)
+    conv_id = "conv-0123456789abcdef0123456789abcdef"
+    session_store.record(ws, "old-sess", conv_id, stored_dir)
 
     captured: dict[str, Any] = {}
     mgr = _capturing_mgr(captured)
@@ -191,7 +192,7 @@ async def test_implement_resume_threads_stored_state(
     )
 
     cfg = captured["config"]
-    assert cfg.conversation_id == "conv-abc"
+    assert cfg.conversation_id == conv_id
     assert cfg.save_dir == stored_dir
 
 
@@ -203,7 +204,7 @@ async def test_implement_fresh_ignores_stored_state(
     monkeypatch.setenv("CAO_PLUGIN_DATA", str(tmp_path / "data"))
     ws = str(tmp_path)
     stored_dir = str(tmp_path / "stored-traj")
-    session_store.record(ws, "old-sess", "conv-abc", stored_dir)
+    session_store.record(ws, "old-sess", "conv-0123456789abcdef0123456789abcdef", stored_dir)
 
     captured: dict[str, Any] = {}
     mgr = _capturing_mgr(captured)
