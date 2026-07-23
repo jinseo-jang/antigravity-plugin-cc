@@ -4,8 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/ko/1.0.0/).
 
 ## [Unreleased]
+
+## [0.2.0] - 2026-07-23
 ### Added
-- Added `gemini-3.6-flash` (new default) and `gemini-3.5-flash-lite` to the supported-model allowlist; updated recovery message and docs accordingly.
+- `gemini-3.6-flash` and `gemini-3.5-flash-lite` added to the supported-model allowlist (region `global`); recovery message + README + `/agy:setup` docs updated.
+### Changed
+- Default model is now `gemini-3.6-flash` (was `gemini-3.5-flash`).
+### Fixed
+- Support `google-antigravity` 0.1.7: its new `conversation_id` >= 32-char validator broke the resume tests; migrated the fixtures and raised the SDK cap to `<0.2`.
 
 ## [0.1.2] - 2026-07-12
 ### Fixed

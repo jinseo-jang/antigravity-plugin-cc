@@ -1,6 +1,6 @@
 [project]
 name = "claude-antigravity-orchestrator"
-version = "0.1.2"
+version = "0.2.0"
 description = "Claude Code plugin runtime for supervising Antigravity SDK workers"
 license = {file = "LICENSE"}
 authors = [{ name = "jinseo-jang", email = "jinseo.jang@gmail.com" }]
