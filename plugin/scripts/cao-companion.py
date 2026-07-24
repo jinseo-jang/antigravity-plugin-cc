@@ -81,18 +81,24 @@ _AUTOSTART_TIMEOUT: float = 10.0
 # ponytail: mirrors cao.runtime.workspace EXACTLY (companion cannot import cao);
 # tests/test_companion_socket.py cross-checks the two copies never diverge.
 _MARKERS = (".git", ".claude-plugin")
+_SOCKET_NAME = "rpc.sock"
+_MAX_SOCKET_PATH = 100  # AF_UNIX sun_path cap; see cao.runtime.workspace
 
 
 def _state_dir(workspace: Path) -> Path:
     slug = re.sub(r"[^a-zA-Z0-9._-]", "-", workspace.name)
     digest = hashlib.sha256(str(workspace).encode()).hexdigest()[:16]
+    leaf = f"{slug}-{digest}"
     env_data = os.environ.get("CAO_PLUGIN_DATA")
     root = (
         Path(env_data) / "state"
         if env_data
         else Path(tempfile.gettempdir()) / "cao-companion"
     )
-    return root / f"{slug}-{digest}"
+    candidate = root / leaf
+    if len(str(candidate / _SOCKET_NAME)) > _MAX_SOCKET_PATH:
+        return Path(tempfile.gettempdir()) / "cao-companion" / leaf
+    return candidate
 
 
 def _resolve_workspace() -> Path:
@@ -121,7 +127,7 @@ def _resolve_workspace() -> Path:
 
 
 def _socket_path() -> Path:
-    return _state_dir(_resolve_workspace()) / "rpc.sock"
+    return _state_dir(_resolve_workspace()) / _SOCKET_NAME
 
 
 def _send_rpc(
