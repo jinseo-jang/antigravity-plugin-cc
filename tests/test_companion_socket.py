@@ -93,3 +93,18 @@ def test_daemon_and_companion_agree_on_blocklisted_root(
     tmp_sock = workspace.state_dir(Path("/tmp")) / "rpc.sock"
     assert daemon.socket_path() == Path(companion._socket_path())  # parity
     assert daemon.socket_path() != tmp_sock  # neither collapses to /tmp
+
+
+def test_daemon_and_companion_fall_back_identically_on_long_base(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A CAO_PLUGIN_DATA base long enough to overflow the AF_UNIX socket path must make
+    BOTH copies fall back to the short /tmp root identically — else they'd compute
+    different sockets on the new branch and never connect."""
+    long_base = tmp_path / ("x" * 120)
+    long_base.mkdir()
+    monkeypatch.setenv("CAO_PLUGIN_DATA", str(long_base))
+    monkeypatch.setenv("CAO_WORKSPACE", str(tmp_path / "proj"))
+
+    assert daemon.socket_path() == Path(companion._socket_path())  # parity on fallback
+    assert not str(daemon.socket_path()).startswith(str(long_base))  # relocated

@@ -9,6 +9,7 @@ RED before workspace.py exists; GREEN after.
 """
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -112,6 +113,10 @@ def test_blocklisted_broad_root_with_marker_not_anchored(tmp_path: Path, monkeyp
 
 def test_state_dir_and_socket_scheme(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """state_dir/socket_path use the slug-hash scheme under CAO_PLUGIN_DATA/state."""
+    # Pin the cap high so the AF_UNIX fallback never fires here — pytest's own tmp_path
+    # can exceed it and would otherwise relocate the state dir to /tmp (see the
+    # dedicated fallback test below). This keeps the scheme assertions deterministic.
+    monkeypatch.setattr(workspace, "_MAX_SOCKET_PATH", 10_000)
     monkeypatch.setenv("CAO_PLUGIN_DATA", str(tmp_path))
     monkeypatch.setenv("CAO_WORKSPACE", str(tmp_path / "agy-try"))
     ws = Path(str(tmp_path / "agy-try"))
@@ -119,3 +124,28 @@ def test_state_dir_and_socket_scheme(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert sd.parent == tmp_path / "state"
     assert sd.name.startswith("agy-try-")
     assert workspace.socket_path() == workspace.state_dir(ws.resolve()) / "rpc.sock"
+
+
+def test_socket_falls_back_to_short_root_when_path_too_long(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A deep CAO_PLUGIN_DATA base must not overflow the AF_UNIX socket path: state_dir
+    falls back to the short /tmp root so bind() stays under the limit.
+
+    RED before the fix (socket_path returns the overflowing candidate under the long
+    base); GREEN after. Asserts relocation rather than an absolute length so it is
+    portable across platforms (macOS's tempdir is itself long).
+    """
+    long_base = tmp_path / ("x" * 120)
+    long_base.mkdir()
+    monkeypatch.setenv("CAO_PLUGIN_DATA", str(long_base))
+    monkeypatch.setenv("CAO_WORKSPACE", str(tmp_path / "proj"))
+
+    ws = Path(str(tmp_path / "proj"))
+    leaf = workspace.state_dir(ws).name
+    candidate = long_base / "state" / leaf / "rpc.sock"
+    assert len(str(candidate)) > workspace._MAX_SOCKET_PATH  # precondition: overflows
+
+    sock = workspace.socket_path()
+    assert not str(sock).startswith(str(long_base))  # relocated off the long base
+    assert str(sock).startswith(str(Path(tempfile.gettempdir()) / "cao-companion"))

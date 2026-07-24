@@ -20,6 +20,13 @@ from pathlib import Path
 
 _MARKERS = (".git", ".claude-plugin")
 
+_SOCKET_NAME = "rpc.sock"
+# AF_UNIX caps the bound socket path: 108 bytes (Linux) / 104 (macOS, incl. the
+# trailing NUL). A deep CAO_PLUGIN_DATA base (e.g. a long $HOME) can push
+# state_dir()/rpc.sock past that and break bind(); fall back to the short /tmp root
+# when it would. 100 stays under the stricter macOS cap with headroom.
+_MAX_SOCKET_PATH = 100
+
 
 def _state_root() -> Path:
     env_data = os.environ.get("CAO_PLUGIN_DATA")
@@ -27,10 +34,18 @@ def _state_root() -> Path:
 
 
 def state_dir(workspace: Path) -> Path:
-    """Pure slug-hash state-dir path (no mkdir)."""
+    """Pure slug-hash state-dir path (no mkdir).
+
+    Falls back to the short /tmp root when the socket under the persistent root
+    would exceed the AF_UNIX path limit (a long CAO_PLUGIN_DATA base / $HOME).
+    """
     slug = re.sub(r"[^a-zA-Z0-9._-]", "-", workspace.name)
     digest = hashlib.sha256(str(workspace).encode()).hexdigest()[:16]
-    return _state_root() / f"{slug}-{digest}"
+    leaf = f"{slug}-{digest}"
+    candidate = _state_root() / leaf
+    if len(str(candidate / _SOCKET_NAME)) > _MAX_SOCKET_PATH:
+        return Path(tempfile.gettempdir()) / "cao-companion" / leaf
+    return candidate
 
 
 def _blocked_roots() -> frozenset[Path]:
@@ -77,4 +92,4 @@ def resolve_workspace() -> Path:
 
 
 def socket_path() -> Path:
-    return state_dir(resolve_workspace()) / "rpc.sock"
+    return state_dir(resolve_workspace()) / _SOCKET_NAME
